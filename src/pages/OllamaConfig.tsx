@@ -1,9 +1,9 @@
 // @ts-ignore
 import React, { useState, useEffect } from 'react';
-import { fetchOllamaModels } from './ollamaApi';
 import { useSettingsStore } from '../store/settingsStore'
 import { Form, Input, Button, Select, Spin, Alert, message, Typography, Space, theme } from 'antd'
 import { useNavigate } from 'react-router-dom'
+import { AIServiceManager, AIServiceType } from '../services';
 
 const { Title, Text, Paragraph } = Typography
 const { useToken } = theme
@@ -23,13 +23,23 @@ const OllamaConfig: React.FC = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { token } = useToken();
+  
+  // 获取AI服务管理器
+  const serviceManager = AIServiceManager.getInstance();
 
   // 只获取一次模型列表
   useEffect(() => {
     if (!baseUrl) return;
     setLoading(true);
     setError('');
-    fetchOllamaModels(baseUrl)
+    
+    // 使用服务架构获取模型列表
+    const service = serviceManager.getService(
+      AIServiceType.OLLAMA, 
+      { baseUrl, model: '' } // 临时服务实例，不需要指定模型
+    );
+    
+    service.getModels()
       .then(list => {
         setModels(list);
         // 只在 model 为空时才自动设置
@@ -48,10 +58,36 @@ const OllamaConfig: React.FC = () => {
     setOllama({ baseUrl, model: value });
   };
 
+  // 检查服务可用性
+  const checkServiceAvailability = async () => {
+    setLoading(true);
+    try {
+      const service = serviceManager.getService(
+        AIServiceType.OLLAMA, 
+        { baseUrl, model: model || '' }
+      );
+      
+      const available = await service.checkAvailability();
+      if (available) {
+        message.success('服务连接成功');
+      } else {
+        message.error('服务连接失败');
+      }
+    } catch (err) {
+      message.error('服务连接失败: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 保存配置并提示
   const handleSave = () => {
     try {
       setOllama({ baseUrl, model });
+      
+      // 清除原有服务缓存
+      serviceManager.clearServiceCache(AIServiceType.OLLAMA, baseUrl);
+      
       message.success('保存配置成功');
     } catch (err) {
       message.error('保存配置失败');
@@ -69,7 +105,16 @@ const OllamaConfig: React.FC = () => {
       
       <Form layout="vertical" style={{ maxWidth: 500 }}>
         <Form.Item label="Ollama 服务地址">
-          <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="http://localhost:11434" />
+          <Space.Compact style={{ width: '100%' }}>
+            <Input 
+              value={baseUrl} 
+              onChange={e => setBaseUrl(e.target.value)} 
+              placeholder="http://localhost:11434" 
+            />
+            <Button onClick={checkServiceAvailability} loading={loading}>
+              测试连接
+            </Button>
+          </Space.Compact>
         </Form.Item>
         <Form.Item label="模型名称">
           {loading ? (

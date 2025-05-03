@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Message, useChatStore } from "../store/chatStore";
-import { sendMessageToOllamaStream } from "../pages/ollamaApi";
 import { useSettingsStore } from "../store/settingsStore";
 import { usePromptStore } from "../store/promptStore";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +29,7 @@ import {
   EllipsisOutlined,
 } from "@ant-design/icons";
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
+import { AIServiceManager, AIServiceType, ChatRequest } from "../services";
 
 const { Text, Paragraph } = Typography;
 const { useToken } = theme;
@@ -392,13 +392,16 @@ const ChatPanel: React.FC = () => {
   const { prompts } = usePromptStore();
   const session = sessions.find((s) => s.id === currentSessionId);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
-  const [thinkingContent, setThinkingContent] = useState<string | null>(null); // 模型思考过程
+  const [thinkingContent, setThinkingContent] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false); // 是否正在生成回复
-  const abortControllerRef = useRef<AbortController | null>(null); // 用于终止生成
+  const [isGenerating, setIsGenerating] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const navigate = useNavigate();
   const { token } = useToken();
   const bubbleListRef = useRef<HTMLDivElement>(null);
+  
+  // 获取AI服务管理器实例
+  const serviceManager = AIServiceManager.getInstance();
 
   // 注入全局样式
   useEffect(() => {
@@ -512,6 +515,15 @@ const ChatPanel: React.FC = () => {
       // 创建 AbortController 用于取消请求
       abortControllerRef.current = new AbortController();
       
+      // 获取对应的AI服务
+      const aiService = serviceManager.getService(
+        AIServiceType.OLLAMA, 
+        { 
+          baseUrl: ollama.baseUrl, 
+          model: ollama.model 
+        }
+      );
+      
       // 构建消息历史
       const messages = session.messages
         .filter((m) => !m.id.startsWith("thinking-")) // 过滤掉思考消息
@@ -524,11 +536,10 @@ const ChatPanel: React.FC = () => {
       // 开始流式响应
       setStreamingContent("");
 
-      await sendMessageToOllamaStream({
-        baseUrl: ollama.baseUrl,
-        model: ollama.model,
+      // 创建聊天请求
+      const chatRequest: ChatRequest = {
         messages,
-        signal: abortControllerRef.current.signal, // 传递 AbortSignal
+        signal: abortControllerRef.current.signal,
         onStream: (text) => {
           lastContent = text;
           setStreamingContent(text);
@@ -536,8 +547,11 @@ const ChatPanel: React.FC = () => {
         onThinking: (text) => {
           finalThinkingContent = text; // 记录最终的思考内容
           setThinkingContent(text);
-        },
-      });
+        }
+      };
+
+      // 发送请求并获取回复
+      await aiService.chat(chatRequest);
 
       // 流式回复结束，保存最终回复
       const msg: Message = {
