@@ -2,7 +2,6 @@ import { ConfigProvider, theme } from 'antd'
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import zhCN from 'antd/locale/zh_CN'
 import { useUIStore } from './store/uiStore'
-import { useSettingsStore } from './store/settingsStore'
 import MainLayout from './layouts/MainLayout'
 import SessionList from './components/SessionList'
 import SettingsList from './components/SettingsList'
@@ -11,6 +10,7 @@ import ModelSettings from './pages/ModelSettings'
 import PromptSettings from './pages/PromptSettings'
 import AboutPage from './pages/AboutPage'
 import React, { useEffect } from 'react'
+import { initApp, logEnvironmentInfo } from './utils/init'
 
 const MCPPlaceholder = () => <div style={{ padding: 32 }}>敬请期待</div>
 
@@ -57,17 +57,14 @@ function SettingsRoute() {
 
 function App() {
   const isDarkMode = useUIStore(state => state.isDarkMode)
-  const initTheme = useUIStore(state => state.initTheme)
-  const initSettings = useSettingsStore(state => state.initSettings)
   
-  // 初始化主题和应用配置
+  // 应用初始化
   useEffect(() => {
-    // 初始化主题
-    initTheme()
-    console.log('初始化主题:', isDarkMode ? '深色' : '明亮')
+    // 初始化应用配置和主题
+    initApp();
     
-    // 初始化应用配置
-    initSettings()
+    // 打印环境信息用于调试
+    logEnvironmentInfo();
   }, [])
   
   return (

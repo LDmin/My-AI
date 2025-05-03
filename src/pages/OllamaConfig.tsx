@@ -36,40 +36,22 @@ const OllamaConfig: React.FC = () => {
         if (list.length > 0 && !model) {
           setModel(list[0]);
           setOllama({ baseUrl, model: list[0] });
-          
-          // 保存到存储
-          saveToStorage(baseUrl, list[0]);
         }
       })
       .catch(() => setError('无法获取模型列表'))
       .finally(() => setLoading(false));
   }, [baseUrl]);
 
-  // 保存到两种存储
-  const saveToStorage = (baseUrl: string, modelName: string) => {
-    // 保存到uTools数据库
-    if (window.utools) {
-      window.utools.dbStorage.setItem('selected-model', modelName);
-      window.utools.dbStorage.setItem('ollama-baseUrl', baseUrl);
-    }
-    
-    // 同时保存到localStorage作为备份
-    localStorage.setItem('selected-model', modelName);
-    localStorage.setItem('ollama-baseUrl', baseUrl);
-  }
-
-  // 选择模型时自动同步到全局 store并缓存
+  // 选择模型时自动同步到全局 store
   const handleModelChange = (value: string) => {
     setModel(value);
     setOllama({ baseUrl, model: value });
-    saveToStorage(baseUrl, value);
   };
 
   // 保存配置并提示
   const handleSave = () => {
     try {
       setOllama({ baseUrl, model });
-      saveToStorage(baseUrl, model);
       message.success('保存配置成功');
     } catch (err) {
       message.error('保存配置失败');

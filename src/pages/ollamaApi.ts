@@ -56,12 +56,13 @@ function processThinkContent(text: string): { thinking: string, content: string 
 }
 
 // 新增：流式对话
-export async function sendMessageToOllamaStream({ baseUrl, model, messages, onStream, onThinking }: {
+export async function sendMessageToOllamaStream({ baseUrl, model, messages, onStream, onThinking, signal }: {
   baseUrl: string;
   model: string;
   messages: { role: string; content: string }[];
   onStream?: (text: string) => void;
   onThinking?: (text: string) => void;
+  signal?: AbortSignal;
 }): Promise<string> {
   const res = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
@@ -70,7 +71,8 @@ export async function sendMessageToOllamaStream({ baseUrl, model, messages, onSt
       model,
       messages,
       stream: true
-    })
+    }),
+    signal // 添加 AbortSignal 以支持取消请求
   });
   
   const reader = res.body?.getReader();
@@ -121,6 +123,10 @@ export async function sendMessageToOllamaStream({ baseUrl, model, messages, onSt
       }
     }
   } catch (error) {
+    // 检查是否是中止错误
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error; // 继续抛出中止错误，让调用者知道请求被中止
+    }
     console.error('流式读取错误:', error);
   }
   
