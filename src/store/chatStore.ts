@@ -20,6 +20,7 @@ interface ChatState {
   setCurrentSession: (id: string) => void
   addSession: (name: string) => void
   addMessage: (sessionId: string, message: Message) => void
+  deleteMessage: (sessionId: string, messageId: string) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -50,6 +51,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addMessage: (sessionId, message) => set(state => ({
     sessions: state.sessions.map(s =>
       s.id === sessionId ? { ...s, messages: [...s.messages, message] } : s
+    )
+  })),
+  deleteMessage: (sessionId, messageId) => set(state => ({
+    sessions: state.sessions.map(s =>
+      s.id === sessionId 
+        ? { ...s, messages: s.messages.filter(m => m.id !== messageId) } 
+        : s
     )
   }))
 }))

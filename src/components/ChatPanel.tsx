@@ -13,6 +13,9 @@ import {
   Card,
   message,
   Avatar,
+  Dropdown,
+  Menu,
+  Modal,
 } from "antd";
 import {
   RocketOutlined,
@@ -22,6 +25,9 @@ import {
   RobotOutlined,
   SendOutlined,
   StopOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
+  EllipsisOutlined,
 } from "@ant-design/icons";
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
 
@@ -245,10 +251,65 @@ interface ChatBubbleProps {
   content: React.ReactNode;
   isUser: boolean;
   time: string;
+  message: Message;
+  onCopy: (content: string) => void;
+  onDelete: (messageId: string) => void;
+  onReask: (content: string) => void;
 }
 
-const ChatBubble: React.FC<ChatBubbleProps> = ({ content, isUser, time }) => {
+const ChatBubble: React.FC<ChatBubbleProps> = ({ 
+  content, 
+  isUser, 
+  time, 
+  message, 
+  onCopy, 
+  onDelete, 
+  onReask 
+}) => {
   const { token } = theme.useToken();
+  const [menuVisible, setMenuVisible] = useState(false);
+  
+  // 右键菜单项
+  const menuItems = [
+    {
+      key: 'copy',
+      icon: <CopyOutlined />,
+      label: '复制消息',
+      onClick: () => {
+        onCopy(message.content);
+        setMenuVisible(false);
+      },
+    },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: '删除消息',
+      danger: true,
+      onClick: () => {
+        onDelete(message.id);
+        setMenuVisible(false);
+      },
+    }
+  ];
+  
+  // 仅对用户消息添加"重新提问"选项
+  if (isUser) {
+    menuItems.push({
+      key: 'reask',
+      icon: <ReloadOutlined />,
+      label: '重新提问',
+      onClick: () => {
+        onReask(message.content);
+        setMenuVisible(false);
+      },
+    });
+  }
+
+  // 处理右键菜单
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setMenuVisible(true);
+  };
 
   return (
     <div
@@ -257,6 +318,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ content, isUser, time }) => {
         flexDirection: isUser ? "row-reverse" : "row",
         alignItems: "flex-start",
         marginBottom: 16,
+        position: "relative",
       }}
     >
       <Avatar
@@ -267,26 +329,65 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ content, isUser, time }) => {
           margin: isUser ? "0 0 0 12px" : "0 12px 0 0",
         }}
       />
-      <div style={{ maxWidth: "80%" }}>
-        <div
-          style={{
-            fontSize: 12,
-            color: token.colorTextSecondary,
-            textAlign: isUser ? "right" : "left",
-            padding: "0 12px",
-            marginBottom: 4,
-          }}
+      <Dropdown
+        menu={{ items: menuItems }}
+        trigger={['contextMenu']}
+        open={menuVisible}
+        onOpenChange={setMenuVisible}
+      >
+        <div 
+          style={{ maxWidth: "80%", position: "relative" }}
+          onContextMenu={handleContextMenu}
         >
-          {time}
+          <div
+            style={{
+              fontSize: 12,
+              color: token.colorTextSecondary,
+              textAlign: isUser ? "right" : "left",
+              padding: "0 12px",
+              marginBottom: 4,
+            }}
+          >
+            {time}
+          </div>
+          <div className="message-bubble-wrapper">
+            <Bubble content={content} placement={isUser ? "end" : "start"} />
+            <Button
+              type="text"
+              size="small"
+              icon={<EllipsisOutlined />}
+              style={{
+                position: "absolute",
+                right: isUser ? 5 : "auto",
+                left: isUser ? "auto" : 5,
+                top: 28, // 调整位置，避免遮挡时间
+                opacity: 0,
+                transition: "opacity 0.3s",
+                backgroundColor: "rgba(255, 255, 255, 0.8)",
+                borderRadius: "50%",
+                width: 24,
+                height: 24,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuVisible(true);
+              }}
+              className="message-action-btn"
+            />
+          </div>
         </div>
-        <Bubble content={content} placement={isUser ? "end" : "start"} />
-      </div>
+      </Dropdown>
     </div>
   );
 };
 
 const ChatPanel: React.FC = () => {
-  const { sessions, currentSessionId, addMessage } = useChatStore();
+  const { sessions, currentSessionId, addMessage, deleteMessage } = useChatStore();
   const { ollama } = useSettingsStore();
   const { prompts } = usePromptStore();
   const session = sessions.find((s) => s.id === currentSessionId);
@@ -298,6 +399,27 @@ const ChatPanel: React.FC = () => {
   const navigate = useNavigate();
   const { token } = useToken();
   const bubbleListRef = useRef<HTMLDivElement>(null);
+
+  // 注入全局样式
+  useEffect(() => {
+    // 创建样式元素
+    const style = document.createElement('style');
+    style.textContent = `
+      .message-action-btn {
+        opacity: 0;
+        z-index: 10;
+      }
+      .message-bubble-wrapper:hover .message-action-btn {
+        opacity: 1;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // 清理函数
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -493,6 +615,52 @@ const ChatPanel: React.FC = () => {
     return <MessageContent content={content} />;
   };
 
+  // 处理复制消息
+  const handleCopyMessage = (content: string) => {
+    navigator.clipboard.writeText(content)
+      .then(() => {
+        message.success("消息已复制到剪贴板");
+      })
+      .catch(() => {
+        message.error("复制失败，请手动复制");
+      });
+  };
+
+  // 处理删除消息
+  const handleDeleteMessage = (messageId: string) => {
+    if (!session) return;
+    
+    Modal.confirm({
+      title: "确认删除",
+      content: "确定要删除这条消息吗？",
+      okText: "确定",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      onOk: () => {
+        deleteMessage(session.id, messageId);
+        message.success("消息已删除");
+      },
+    });
+  };
+
+  // 处理重新提问
+  const handleReaskMessage = (content: string) => {
+    if (isGenerating) {
+      message.info("正在生成回复，请等待当前回复完成");
+      return;
+    }
+    setInputValue(content);
+    // 聚焦输入框
+    const inputElement = document.querySelector('.ant-sender textarea') as HTMLTextAreaElement;
+    if (inputElement) {
+      inputElement.focus();
+      // 自动滚动到底部
+      if (bubbleListRef.current) {
+        bubbleListRef.current.scrollTop = bubbleListRef.current.scrollHeight;
+      }
+    }
+  };
+
   return (
     <div
       style={{
@@ -533,6 +701,10 @@ const ChatPanel: React.FC = () => {
                 content={renderMessageContent(msg.content)}
                 isUser={isUser}
                 time={formatTime(msg.createAt)}
+                message={msg}
+                onCopy={handleCopyMessage}
+                onDelete={handleDeleteMessage}
+                onReask={handleReaskMessage}
               />
             );
           })}
