@@ -48,16 +48,16 @@ const AboutPage: React.FC = () => {
           <Title level={4}>作者信息</Title>
           <Card style={{ borderRadius: token.borderRadius }}>
             <Space direction="vertical">
-              <Text strong>开发者: Your Name</Text>
-              <Space>
+              <Text strong>开发者: 牧曲哥哥</Text>
+              {/* <Space>
                 <MailOutlined /> <Link href="mailto:example@domain.com">example@domain.com</Link>
-              </Space>
+              </Space> */}
               <Space>
-                <GithubOutlined /> <Link href="https://github.com/yourusername" target="_blank">github.com/yourusername</Link>
+                <GithubOutlined /> <Link href="https://github.com/LDmin/My-AI" target="_blank">https://github.com/LDmin/My-AI</Link>
               </Space>
-              <Space>
+              {/* <Space>
                 <LinkOutlined /> <Link href="https://yourwebsite.com" target="_blank">yourwebsite.com</Link>
-              </Space>
+              </Space> */}
             </Space>
           </Card>
         </div>
