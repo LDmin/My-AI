@@ -1,0 +1,83 @@
+:root {
+  --bg-color: #ffffff;
+  --text-color: #333333;
+  --header-bg: #f5f5f5;
+  --message-bg: #f9f9f9;
+  --input-bg: #ffffff;
+  --border-color: #e8e8e8;
+  --bubble-bg: #f9f9f9;
+  --bubble-text: #333;
+  --input-text: #333;
+  --left-bg: #f0f2f5;
+  --center-bg: #ffffff;
+  --right-bg: #ffffff;
+  --center-border: #e8e8e8;
+}
+
+:global([data-theme='dark']) {
+  --bg-color: #1f1f1f;
+  --text-color: #e0e0e0;
+  --header-bg: #16222c;
+  --message-bg: #2a2a2a;
+  --input-bg: #2d2d2d;
+  --border-color: #383838;
+  --bubble-bg: #222;
+  --bubble-text: #fff;
+  --input-text: #fff;
+  --left-bg: #141414;
+  --center-bg: #1f1f1f;
+  --right-bg: #1f1f1f;
+  --center-border: #303030;
+}
+
+.layout {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-color);
+}
+
+.left {
+  width: 60px;
+  background-color: var(--left-bg);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 16px 0;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 这些样式会被添加到子组件层 */
+:global(.center-panel) {
+  width: 320px;
+  min-width: 280px;
+  max-width: 350px;
+  background-color: var(--center-bg);
+  border-right: 1px solid var(--center-border);
+  height: 100%;
+  overflow-y: auto;
+}
+
+:global(.right-panel) {
+  flex: 1;
+  height: 100%;
+  background-color: var(--right-bg);
+  overflow-y: auto;
+}
+
+/* 深色模式支持 */
+:global([data-theme='dark']) .left {
+  background-color: #141414;
+}
+
+:global([data-theme='dark']) :global(.center-panel) {
+  border-right-color: #303030;
+}

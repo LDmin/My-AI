@@ -1,0 +1,22 @@
+{
+  "main": "index.html",
+  "logo": "logo.png",
+  "preload": "preload.js",
+  "features": [
+    {
+      "code": "myai",
+      "explain": "本地大模型AI对话",
+      "cmds": ["myai", "我的AI", "AI对话"]
+    }
+  ],
+  "development": {
+    "main": "http://localhost:5173/"
+  },
+  "pluginName": "MyAI",
+  "description": "本地大模型AI对话助手",
+  "author": "Your Name",
+  "homepage": "https://github.com/yourusername/myai",
+  "version": "0.0.1",
+  "platform": ["win32", "darwin", "linux"],
+  "minimumVersion": "3.0.0"
+} 

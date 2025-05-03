@@ -1,0 +1,38 @@
+{
+  "name": "myai",
+  "private": true,
+  "version": "0.0.1",
+
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "build:plugin": "npm run build && mkdir -p dist/plugin && cp -r dist/* dist/plugin/ && cp plugin.json preload.js dist/"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.0.0",
+    "@ant-design/pro-chat": "^1.15.3",
+    "@ant-design/pro-components": "^2.0.0",
+    "@ant-design/x": "^1.2.0",
+    "@emotion/react": "^11.0.0",
+    "@emotion/styled": "^11.0.0",
+    "antd": "^5.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.5.3",
+    "zustand": "^5.0.4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.64",
+    "@types/react-dom": "^18.2.21",
+    "@typescript-eslint/eslint-plugin": "^7.1.1",
+    "@typescript-eslint/parser": "^7.1.1",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.6"
+  }
+}

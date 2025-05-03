@@ -1,0 +1,49 @@
+.settingsList {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+}
+
+.header {
+  font-weight: bold;
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.item {
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: background 0.2s, color 0.2s;
+  color: var(--text-color);
+}
+
+.item:hover {
+  background: #e6f7ff;
+}
+
+.active {
+  background: #e6f7ff;
+  color: #1677ff;
+  font-weight: bold;
+}
+
+:global([data-theme='dark']) .item:hover {
+  background: #16222c;
+}
+
+:global([data-theme='dark']) .active {
+  background: #16222c;
+  color: #1677ff;
+  font-weight: bold;
+} 
