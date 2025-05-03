@@ -144,12 +144,14 @@ const ChatPanel: React.FC = () => {
   if (thinkingContent) {
     chatData.push({
       id: 'thinking',
-      content: `### 💭 模型思考过程\n\`\`\`\n${thinkingContent}\n\`\`\``,
+      content: `> **💭 模型思考过程**\n\`\`\`\n${thinkingContent}\n\`\`\``,
       role: 'assistant',
       createAt: Date.now(),
       updateAt: Date.now()
     })
   }
+  
+
   
   // 添加流式响应（如果有）
   if (streamingContent) {
@@ -183,6 +185,7 @@ const ChatPanel: React.FC = () => {
         <ProChat
           key={currentSessionId}
           chats={chatData}
+          // 不设置loading属性，避免影响正常显示
           placeholder="输入消息，/ 查看建议，或点击上方提示词快速插入"
           request={async (allMessages) => {
             // 每次开始新请求时清空思考内容
@@ -204,7 +207,8 @@ const ChatPanel: React.FC = () => {
             // 开始生成AI回复
             let streamId = `ai-${Date.now()}`
             let lastContent = ''
-            setStreamingContent('') // 开始流式
+            // 设置状态为处理中
+            setStreamingContent('')
             
             try {
               // 构建消息历史
@@ -228,6 +232,8 @@ const ChatPanel: React.FC = () => {
                 }
               })
               
+              // 完成响应，但保持生成状态直到保存完所有消息
+              
               // 流式回复结束，保存最终回复
               const msg: Message = {
                 id: streamId,
@@ -236,10 +242,26 @@ const ChatPanel: React.FC = () => {
                 createAt: Date.now(),
                 updateAt: Date.now(),
               }
+              
+              // 如果有思考内容，保存到会话中
+              if (thinkingContent) {
+                const thinkingMsg: Message = {
+                  id: `thinking-${Date.now()}`,
+                  content: `> **💭 模型思考过程**\n\`\`\`\n${thinkingContent}\n\`\`\``,
+                  role: 'assistant',
+                  createAt: Date.now(),
+                  updateAt: Date.now(),
+                }
+                addMessage(session?.id || '', thinkingMsg)
+              }
+              
               addMessage(session?.id || '', msg)
-              return { content: lastContent }
+              // 返回结果并指定状态为complete，以解决发送按钮一直转圈问题
+              // 返回简单字符串而不是对象，避免 response.clone 错误
+              return lastContent
             } finally {
-              setStreamingContent(null) // 确保无论成功失败都结束流式
+              // 无论成功失败，都重置各种状态
+              setStreamingContent(null) // 结束流式
               setThinkingContent(null) // 清空思考内容
             }
           }}
