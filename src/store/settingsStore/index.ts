@@ -12,6 +12,15 @@ interface SiliconflowConfig {
   token: string
 }
 
+// 网络搜索配置
+export type WebSearchType = 'none' | 'built-in' | 'bing' | 'google';
+
+interface WebSearchConfig {
+  enabled: boolean
+  type: WebSearchType
+  apiKey?: string // 可能需要的API密钥
+}
+
 // 服务类型定义
 export type AIServiceType = 'ollama' | 'siliconflow' | 'openai' | 'api2d' | 'azure';
 
@@ -23,16 +32,19 @@ interface Settings {
   darkMode: boolean
   serviceType: AIServiceType
   siliconflowToken: string
+  webSearch: WebSearchConfig
   [key: string]: any
 }
 
 interface SettingsState {
   ollama: OllamaConfig
   siliconflow: SiliconflowConfig
+  webSearch: WebSearchConfig
   settings: Settings
   serviceType: AIServiceType
   setOllama: (config: OllamaConfig) => void
   setSiliconflow: (config: SiliconflowConfig) => void
+  setWebSearch: (config: WebSearchConfig) => void
   setServiceType: (type: AIServiceType) => void
   setSettings: (settings: Settings) => void
   setTheme: (theme: 'light' | 'dark') => void
@@ -45,7 +57,11 @@ const defaultSettings: Settings = {
   temperature: 0.7,
   darkMode: false,
   serviceType: 'ollama',
-  siliconflowToken: ''
+  siliconflowToken: '',
+  webSearch: {
+    enabled: false,
+    type: 'built-in'
+  }
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -57,6 +73,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     baseUrl: 'https://api.siliconflow.cn',
     model: '',
     token: ''
+  },
+  webSearch: {
+    enabled: false,
+    type: 'built-in'
   },
   serviceType: 'ollama',
   settings: {...defaultSettings},
@@ -97,6 +117,26 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         model: config.model,
         siliconflowToken: config.token,
         serviceType: 'siliconflow'
+      })
+    }
+  },
+  
+  setWebSearch: (config) => {
+    set({ webSearch: config })
+    
+    // 保存配置到存储
+    saveData('web-search-enabled', config.enabled)
+    saveData('web-search-type', config.type)
+    if (config.apiKey) {
+      saveData('web-search-apiKey', config.apiKey)
+    }
+    
+    // 同步到uTools配置
+    if (window.saveSettings) {
+      const current = get().settings
+      window.saveSettings({
+        ...current,
+        webSearch: config
       })
     }
   },
@@ -163,9 +203,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           // 获取服务类型
           const serviceType = uToolsSettings.serviceType || 'ollama'
           
+          // 获取网络搜索配置
+          const webSearch = uToolsSettings.webSearch || {
+            enabled: false,
+            type: 'built-in'
+          }
+          
           set({ 
             settings: uToolsSettings,
             serviceType,
+            webSearch,
             ollama: {
               baseUrl: uToolsSettings.apiUrl || 'http://localhost:11434',
               model: serviceType === 'ollama' ? (uToolsSettings.model || '') : ''
@@ -184,12 +231,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // 否则使用本地存储
       const serviceType = getData('service-type', 'ollama') as AIServiceType
       
+      // 获取网络搜索配置
+      const webSearchEnabled = getData('web-search-enabled', false)
+      const webSearchType = getData('web-search-type', 'built-in') as WebSearchType
+      const webSearchApiKey = getData('web-search-apiKey', '')
+      
+      const webSearch = {
+        enabled: webSearchEnabled,
+        type: webSearchType,
+        apiKey: webSearchApiKey
+      }
+      
       if (serviceType === 'ollama') {
         const model = getData('selected-model', '')
         const baseUrl = getData('ollama-baseUrl', 'http://localhost:11434')
         
         set({ 
           serviceType,
+          webSearch,
           ollama: { 
             baseUrl, 
             model 
@@ -198,7 +257,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             ...defaultSettings,
             apiUrl: baseUrl,
             model,
-            serviceType
+            serviceType,
+            webSearch
           }
         })
       } else {
@@ -208,6 +268,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         
         set({ 
           serviceType,
+          webSearch,
           siliconflow: { 
             baseUrl, 
             model,
@@ -218,12 +279,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             apiUrl: baseUrl,
             model,
             siliconflowToken: token,
-            serviceType
+            serviceType,
+            webSearch
           }
         })
       }
       
-      console.log('从本地存储初始化配置成功:', { serviceType })
+      console.log('从本地存储初始化配置成功:', { serviceType, webSearch })
     } catch (err) {
       console.error('初始化配置失败:', err)
     }

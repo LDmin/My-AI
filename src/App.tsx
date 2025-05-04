@@ -4,18 +4,12 @@ import zhCN from 'antd/locale/zh_CN'
 import { useUIStore } from './store/uiStore'
 import MainLayout from './layouts/MainLayout'
 import SessionList from './components/SessionList'
-import SettingsList from './components/SettingsList'
 import ChatPanel from './components/ChatPanel'
-import ModelSettings from './pages/ModelSettings'
-import PromptSettings from './pages/PromptSettings'
-import AboutPage from './pages/AboutPage'
-import React, { useEffect } from 'react'
+import React, { useEffect, lazy } from 'react'
 import { initApp, logEnvironmentInfo } from './utils/init'
 import { useSettingsStore } from './store/settingsStore'
 import { useChatStore } from './store/chatStore'
 import { usePromptStore } from './store/promptStore'
-
-const MCPPlaceholder = () => <div style={{ padding: 32 }}>敬请期待</div>
 
 // 会话路由
 function ChatRoute() {
@@ -49,26 +43,14 @@ function ChatRoute() {
 
 // 设置路由
 function SettingsRoute() {
-  const location = useLocation()
-  const tab = location.pathname.split('/')[2] || 'model'
-  console.log('SettingsRoute渲染，当前路径:', location.pathname, '选中的tab:', tab)
-  
-  let rightContent = <ModelSettings />
-  
-  if (tab === 'mcp') rightContent = <MCPPlaceholder />
-  else if (tab === 'prompt') rightContent = <PromptSettings />
-  else if (tab === 'about') rightContent = <AboutPage />
+  // 导入并使用Settings组件
+  const Settings = lazy(() => import('./pages/Settings'));
   
   return (
-    <>
-      <div className="center-panel">
-        <SettingsList />
-      </div>
-      <div className="right-panel">
-        {rightContent}
-      </div>
-    </>
-  )
+    <React.Suspense fallback={<div style={{ padding: 32 }}>加载中...</div>}>
+      <Settings />
+    </React.Suspense>
+  );
 }
 
 // 声明全局方法

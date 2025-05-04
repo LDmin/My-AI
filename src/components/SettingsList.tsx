@@ -2,7 +2,7 @@ import React from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import styles from './SettingsList.module.css'
 
-export type SettingsTab = 'model' | 'mcp' | 'prompt' | 'about'
+export type SettingsTab = 'model' | 'mcp' | 'prompt' | 'web-search' | 'about'
 
 interface SettingsListProps {
   active?: SettingsTab
@@ -11,6 +11,7 @@ interface SettingsListProps {
 
 const items = [
   { key: 'model', label: '模型设置' },
+  { key: 'web-search', label: '联网搜索' },
   { key: 'mcp', label: 'MCP服务' },
   { key: 'prompt', label: '个人提词' },
   { key: 'about', label: '关于作者' },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Message, useChatStore } from "../store/chatStore";
 import { useSettingsStore, AIServiceType } from "../store/settingsStore";
 import { usePromptStore, Prompt } from "../store/promptStore";
@@ -34,6 +34,7 @@ import {
   MessageOutlined,
   BulbOutlined,
   HighlightOutlined,
+  GlobalOutlined,
 } from "@ant-design/icons";
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
 import { AIServiceManager, AIServiceType as ServiceType, ChatRequest } from "../services";
@@ -280,24 +281,24 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
   // 右键菜单项
   const menuItems = [
     {
-      key: 'copy',
+      key: "copy",
       icon: <CopyOutlined />,
-      label: '复制消息',
+      label: "复制消息",
       onClick: () => {
         onCopy(message.content);
         setMenuVisible(false);
       },
     },
     {
-      key: 'delete',
+      key: "delete",
       icon: <DeleteOutlined />,
-      label: '删除消息',
+      label: "删除消息",
       danger: true,
       onClick: () => {
         onDelete(message.id);
         setMenuVisible(false);
       },
-    }
+    },
   ];
   
   // 仅对用户消息添加"重新提问"选项
@@ -396,7 +397,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
 
 const ChatPanel: React.FC = () => {
   const { sessions, currentSessionId, addMessage, deleteMessage } = useChatStore();
-  const { ollama, siliconflow, serviceType, setOllama, setSiliconflow } = useSettingsStore();
+  const { ollama, siliconflow, serviceType, webSearch, setOllama, setSiliconflow, setWebSearch } = useSettingsStore();
   const { prompts, globalPrompt, useGlobalPrompt, toggleGlobalPrompt } = usePromptStore();
   const session = sessions.find((s) => s.id === currentSessionId);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
@@ -448,6 +449,49 @@ const ChatPanel: React.FC = () => {
   // 获取AI服务管理器实例
   const serviceManager = AIServiceManager.getInstance();
 
+  // 滚动节流标志
+  const scrollThrottleRef = useRef(false);
+  
+  // 滚动到底部的工具函数
+  const scrollToBottom = useCallback(() => {
+    // 如果已经在执行滚动，则不再重复执行
+    if (scrollThrottleRef.current) {
+      return;
+    }
+    
+    if (bubbleListRef.current) {
+      // 设置节流标志
+      scrollThrottleRef.current = true;
+      
+      setTimeout(() => {
+        if (bubbleListRef.current) {
+          // 检查是否已经在底部附近，如果是则不需要再滚动
+          const scrollPosition = bubbleListRef.current.scrollTop;
+          const scrollHeight = bubbleListRef.current.scrollHeight;
+          const clientHeight = bubbleListRef.current.clientHeight;
+          
+          // 如果已经在底部附近(距离底部不超过100px)，则不再滚动
+          const isNearBottom = scrollHeight - scrollPosition - clientHeight < 100;
+          
+          if (!isNearBottom) {
+            // 直接设置scrollTop (不使用平滑滚动，避免抖动)
+            bubbleListRef.current.scrollTop = scrollHeight;
+            
+            // 不再使用scrollIntoView，因为它可能导致多余的滚动动画
+          }
+          
+          setTimeout(() => {
+            // 释放节流标志
+            scrollThrottleRef.current = false;
+          }, 150);
+        } else {
+          // 如果元素不存在，也要释放节流标志
+          scrollThrottleRef.current = false;
+        }
+      }, 100);
+    }
+  }, []);
+
   // 注入全局样式
   useEffect(() => {
     // 创建样式元素
@@ -469,16 +513,77 @@ const ChatPanel: React.FC = () => {
     };
   }, []);
 
-  // 自动滚动到底部
+  // 自动滚动到底部，减少触发频率
   useEffect(() => {
-    if (bubbleListRef.current) {
+    // 当消息/内容更新时，延迟执行滚动
+    const timer = setTimeout(scrollToBottom, 200);
+    return () => clearTimeout(timer);
+  }, [scrollToBottom, session?.messages, streamingContent, thinkingContent]);
+
+  // 组件初始化时只设置观察者
+  useEffect(() => {
+    // 设置监听之前先执行一次滚动到底部
+    const initialScrollTimer = setTimeout(scrollToBottom, 300);
+    
+    // 添加ResizeObserver监听容器大小变化
+    let resizeThrottling = false;
+    const resizeObserver = new ResizeObserver(() => {
+      // 避免频繁触发
+      if (resizeThrottling) return;
+      resizeThrottling = true;
+      
+      console.log('容器大小变化，重新滚动到底部');
       setTimeout(() => {
-        if (bubbleListRef.current) {
-          bubbleListRef.current.scrollTop = bubbleListRef.current.scrollHeight;
+        scrollToBottom();
+        resizeThrottling = false;
+      }, 200);  // 减少触发频率
+    });
+    
+    if (bubbleListRef.current) {
+      resizeObserver.observe(bubbleListRef.current);
+      
+      // 添加MutationObserver监听内容变化
+      let mutationThrottling = false;
+      const mutationObserver = new MutationObserver((mutations) => {
+        // 避免频繁触发
+        if (mutationThrottling) return;
+        mutationThrottling = true;
+        
+        // 过滤掉不影响高度的细微变化
+        const significantChanges = mutations.some(mutation => 
+          mutation.type === 'childList' || 
+          (mutation.type === 'characterData' && mutation.target.textContent && mutation.target.textContent.length > 10)
+        );
+        
+        if (significantChanges) {
+          console.log('聊天内容变化，触发滚动', mutations.length);
+          setTimeout(() => {
+            scrollToBottom();
+            mutationThrottling = false;
+          }, 300); // 延时执行滚动
+        } else {
+          mutationThrottling = false;
         }
-      }, 100);
+      });
+      
+      mutationObserver.observe(bubbleListRef.current, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      
+      // 清理函数
+      return () => {
+        clearTimeout(initialScrollTimer);
+        resizeObserver.disconnect();
+        mutationObserver.disconnect();
+      };
     }
-  }, [session?.messages, streamingContent, thinkingContent]);
+    
+    return () => {
+      clearTimeout(initialScrollTimer);
+    };
+  }, [scrollToBottom]);
 
   // 处理模型选择变化
   const handleModelChange = (selectedModel: string) => {
@@ -567,9 +672,7 @@ const ChatPanel: React.FC = () => {
     addMessage(session.id, userMessage);
     
     // 自动滚动到底部
-    if (bubbleListRef.current) {
-      bubbleListRef.current.scrollTop = bubbleListRef.current.scrollHeight;
-    }
+    scrollToBottom();
     
     // 标记为生成中，设置状态并创建中止控制器
     setIsGenerating(true);
@@ -642,9 +745,9 @@ const ChatPanel: React.FC = () => {
       await aiService.chat(chatRequest);
 
       // 流式回复结束，保存最终回复
-          const msg: Message = {
-            id: streamId,
-            content: lastContent,
+      const msg: Message = {
+        id: streamId,
+        content: lastContent,
         role: "assistant",
         createAt: Date.now(),
         updateAt: Date.now(),
@@ -663,6 +766,8 @@ const ChatPanel: React.FC = () => {
       }
 
       addMessage(session.id, msg);
+      // 消息添加完成后，确保滚动到底部
+      scrollToBottom();
     } catch (error) {
       // 检查是否是用户主动取消的请求
       if ((error as any)?.name !== 'AbortError') {
@@ -684,6 +789,8 @@ const ChatPanel: React.FC = () => {
       setThinkingContent(null); // 清除思考内容，避免重复显示
       setIsGenerating(false);
       abortControllerRef.current = null;
+      // 对话完成后再次滚动到底部，确保显示完整对话
+      setTimeout(scrollToBottom, 100);
     }
   };
 
@@ -751,6 +858,8 @@ const ChatPanel: React.FC = () => {
       onOk: () => {
         deleteMessage(session.id, messageId);
         message.success("消息已删除");
+        // 删除消息后滚动到底部
+        setTimeout(scrollToBottom, 100);
       },
     });
   };
@@ -767,9 +876,7 @@ const ChatPanel: React.FC = () => {
     if (inputElement) {
       inputElement.focus();
       // 自动滚动到底部
-      if (bubbleListRef.current) {
-        bubbleListRef.current.scrollTop = bubbleListRef.current.scrollHeight;
-      }
+      scrollToBottom();
     }
   };
 
@@ -824,8 +931,45 @@ const ChatPanel: React.FC = () => {
     );
   };
 
+  // 处理点击网络搜索图标
+  const handleWebSearchClick = () => {
+    // 直接切换联网搜索开关状态
+    const newConfig = {
+      ...webSearch,
+      enabled: !webSearch.enabled
+    };
+    
+    // 如果是开启状态，确保有默认搜索类型
+    if (newConfig.enabled && newConfig.type === 'none') {
+      newConfig.type = 'built-in';
+    }
+    
+    // 更新设置
+    setWebSearch(newConfig);
+    
+    // 显示提示消息
+    if (newConfig.enabled) {
+      const searchTypeText = {
+        'built-in': '插件自带搜索',
+        'bing': 'Bing搜索',
+        'google': 'Google搜索',
+        'none': '无'
+      }[newConfig.type];
+      
+      message.success(`已启用联网搜索: ${searchTypeText}`);
+    } else {
+      message.info('已关闭联网搜索');
+    }
+  };
+
   return (
-    <div className="chat-panel" style={{ position: "relative", height: "100%" }}>
+    <div className="chat-panel" style={{ 
+      position: "relative", 
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden"  // 避免整体容器滚动
+    }}>
       {/* 提示词列表弹窗 */}
       {renderPromptListModal()}
       
@@ -870,9 +1014,17 @@ const ChatPanel: React.FC = () => {
           flex: 1,
           overflow: "auto",
           padding: "16px 24px",
+          display: "flex",
+          flexDirection: "column",
+          height: "calc(100vh - 200px)", // 设置一个固定高度确保可滚动
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ 
+          display: "flex", 
+          flexDirection: "column", 
+          gap: "16px",
+          flexGrow: 1, // 确保内容区域可以撑满容器
+        }}>
           {chatMessages.map((msg) => {
             const isThinking = isThinkingMessage(msg);
 
@@ -913,6 +1065,7 @@ const ChatPanel: React.FC = () => {
           bottom: 0,
           // width: "100%",
           zIndex: 10,
+          flexShrink: 0,  // 防止底部区域被压缩
         }}
       >
         {/* 提示词按钮区域 */}
@@ -965,7 +1118,8 @@ const ChatPanel: React.FC = () => {
           display: 'flex', 
           justifyContent: 'flex-start', 
           alignItems: 'center',
-          marginBottom: token.marginXS
+          marginBottom: token.marginXS,
+          gap: token.marginXS // 添加间距
         }}>
           {/* 全局提词开关按钮 */}
           <Tooltip title={useGlobalPrompt ? "已启用全局提词" : "点击启用全局提词"}>
@@ -979,6 +1133,21 @@ const ChatPanel: React.FC = () => {
                 marginRight: 0
               }}
               onClick={toggleGlobalPrompt}
+            />
+          </Tooltip>
+          
+          {/* 联网搜索按钮 */}
+          <Tooltip title={webSearch.enabled ? `已启用联网搜索: ${webSearch.type}` : "点击启用联网搜索"}>
+            <Tag
+              icon={<GlobalOutlined />}
+              color={webSearch.enabled ? "success" : "default"}
+              style={{ 
+                cursor: 'pointer',
+                padding: '4px 8px',
+                borderRadius: token.borderRadiusSM,
+                marginRight: 0
+              }}
+              onClick={handleWebSearchClick}
             />
           </Tooltip>
           
