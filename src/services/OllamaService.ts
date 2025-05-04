@@ -58,6 +58,11 @@ export class OllamaService extends AIService {
       signal
     });
     
+    // 检查响应状态码，如果不是成功状态，抛出错误
+    if (!res.ok) {
+      throw new Error(`API请求失败，状态码: ${res.status}, 错误信息: ${res.statusText}`);
+    }
+    
     const reader = res.body?.getReader();
     const decoder = new TextDecoder('utf-8');
     let fullText = '';

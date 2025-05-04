@@ -396,6 +396,7 @@ const ChatPanel: React.FC = () => {
   const [inputValue, setInputValue] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [promptListVisible, setPromptListVisible] = useState(false); // 提示词列表弹窗可见性
   const navigate = useNavigate();
   const { token } = useToken();
   const bubbleListRef = useRef<HTMLDivElement>(null);
@@ -439,7 +440,7 @@ const ChatPanel: React.FC = () => {
   if (!ollama.model) {
     return (
       <div
-        style={{
+          style={{
           padding: token.paddingLG,
           textAlign: "center",
           display: "flex",
@@ -467,6 +468,7 @@ const ChatPanel: React.FC = () => {
   // 快速插入提示词
   const handleInsertPrompt = (content: string) => {
     setInputValue((prev) => (prev ? prev + "\n" : "") + content);
+    setPromptListVisible(false); // 选择后关闭弹窗
   };
 
   // 处理停止生成
@@ -540,7 +542,7 @@ const ChatPanel: React.FC = () => {
       const chatRequest: ChatRequest = {
         messages,
         signal: abortControllerRef.current.signal,
-        onStream: (text) => {
+            onStream: (text) => {
           lastContent = text;
           setStreamingContent(text);
         },
@@ -554,9 +556,9 @@ const ChatPanel: React.FC = () => {
       await aiService.chat(chatRequest);
 
       // 流式回复结束，保存最终回复
-      const msg: Message = {
-        id: streamId,
-        content: lastContent,
+          const msg: Message = {
+            id: streamId,
+            content: lastContent,
         role: "assistant",
         createAt: Date.now(),
         updateAt: Date.now(),
@@ -579,6 +581,16 @@ const ChatPanel: React.FC = () => {
       // 检查是否是用户主动取消的请求
       if ((error as any)?.name !== 'AbortError') {
         console.error("发送消息失败", error);
+        
+        // 添加错误提示消息到对话
+        const errorMsg: Message = {
+          id: `error-${Date.now()}`,
+          content: "⚠️ **接口错误**：无法连接到大模型服务，请检查网络连接和大模型服务状态。\n\n可能的原因：\n- 大模型服务未启动\n- API地址配置错误\n- 网络连接问题\n- 所选模型不存在\n\n请前往设置页面检查配置，或重启大模型服务后重试。",
+          role: "assistant",
+          createAt: Date.now(),
+          updateAt: Date.now(),
+        };
+        addMessage(session.id, errorMsg);
       }
     } finally {
       // 重置所有临时内容和状态
@@ -609,8 +621,8 @@ const ChatPanel: React.FC = () => {
       id: "stream",
       content: streamingContent,
       role: "assistant",
-      createAt: Date.now(),
-      updateAt: Date.now(),
+            createAt: Date.now(),
+            updateAt: Date.now(),
     });
   }
 
@@ -675,6 +687,57 @@ const ChatPanel: React.FC = () => {
     }
   };
 
+  // 渲染提示词弹窗
+  const renderPromptListModal = () => {
+    return (
+      <Modal
+        title="选择提示词"
+        open={promptListVisible}
+        onCancel={() => setPromptListVisible(false)}
+        footer={null}
+        width={600}
+      >
+        <div style={{ 
+          maxHeight: '60vh', 
+          overflowY: 'auto',
+          padding: token.paddingSM 
+        }}>
+          <Space direction="vertical" size={token.marginSM} style={{ width: '100%' }}>
+            {prompts.map(prompt => (
+              <Card 
+                key={prompt.id} 
+                size="small" 
+                hoverable
+                title={prompt.title}
+                style={{ marginBottom: token.marginXS }}
+                extra={
+                  <Button 
+                    type="primary" 
+                    size="small" 
+                    onClick={() => handleInsertPrompt(prompt.content)}
+                  >
+                    插入
+                  </Button>
+                }
+              >
+                <Paragraph
+                  ellipsis={{ rows: 2, expandable: true, symbol: '展开' }}
+                  style={{ 
+                    color: token.colorTextSecondary,
+                    marginBottom: 0,
+                    fontSize: token.fontSizeSM
+                  }}
+                >
+                  {prompt.content}
+                </Paragraph>
+              </Card>
+            ))}
+          </Space>
+        </div>
+      </Modal>
+    );
+  };
+
   return (
     <div
       style={{
@@ -686,6 +749,9 @@ const ChatPanel: React.FC = () => {
         overflow: "hidden",
       }}
     >
+      {/* 提示词列表弹窗 */}
+      {renderPromptListModal()}
+      
       <div
         ref={bubbleListRef}
         style={{
@@ -764,15 +830,10 @@ const ChatPanel: React.FC = () => {
                   <Button
                     size="small"
                     type="text"
-                    onClick={() => {
-                      // 直接使用第六个提示词
-                      const nextPrompt = prompts[5];
-                      if (nextPrompt) {
-                        handleInsertPrompt(nextPrompt.content);
-                      }
-                    }}
+                    onClick={() => setPromptListVisible(true)}
+                    icon={<EllipsisOutlined />}
                   >
-                    更多...
+                    更多
                   </Button>
                 )}
               </Space>

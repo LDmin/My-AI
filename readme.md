@@ -70,5 +70,41 @@
 - 优化消息流与上下文管理
 - 增加用户自定义主题与快捷指令
 
+## 构建说明
+
+### 开发环境
+
+```bash
+npm run dev
+```
+
+### 生产构建
+
+```bash
+# 构建Web应用
+npm run build
+
+# 构建U-Tools插件
+npm run build:plugin
+
+# 构建UPX安装包
+npm run build:upx  # 需要安装utools-pkg-builder
+```
+
+### 构建配置说明
+
+该项目使用Vite进行构建，经过优化的配置包括：
+
+1. 资源分类存放 - 按照文件类型（JS、CSS、图片、字体等）进行归类处理
+2. 依赖优化 - 将node_modules模块打包为单独的vendor文件，减少打包体积
+3. U-Tools插件支持 - 确保`plugin.json`、`preload.js`和`logo.png`复制到dist目录
+
+### 插件结构
+
+- `plugin.json` - U-Tools插件配置文件，定义了插件基本信息和功能入口
+- `preload.js` - 预加载脚本，处理与系统的交互
+- `logo.png` - 插件图标
+- `dist/` - 构建输出目录，包含所有Web资源和插件文件
+
 ---
 如需二次开发或遇到问题，请查阅源码注释或联系开发者。

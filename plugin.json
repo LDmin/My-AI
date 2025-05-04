@@ -14,9 +14,9 @@
   },
   "pluginName": "MyAI",
   "description": "本地大模型AI对话助手",
-  "author": "Your Name",
-  "homepage": "https://github.com/yourusername/myai",
-  "version": "0.0.1",
+  "author": "牧曲哥哥",
+  "homepage": "https://github.com/LDmin/My-AI",
+  "version": "1.0.0",
   "platform": ["win32", "darwin", "linux"],
   "minimumVersion": "3.0.0"
 } 

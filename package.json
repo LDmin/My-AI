@@ -7,7 +7,8 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "build:plugin": "npm run build && mkdir -p dist/plugin && cp -r dist/* dist/plugin/ && cp plugin.json preload.js dist/"
+    "build:plugin": "npm run build && node scripts/build-plugin.js",
+    "build:upx": "npm run build:plugin && mkdir -p dist-upx && cp -r dist/* dist-upx/ && cd dist-upx && utools-pkg-builder ."
   },
   "dependencies": {
     "@ant-design/icons": "^5.0.0",
@@ -23,6 +24,7 @@
     "zustand": "^5.0.4"
   },
   "devDependencies": {
+    "@types/node": "^22.15.3",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@typescript-eslint/eslint-plugin": "^7.1.1",
@@ -31,6 +33,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "terser": "^5.39.0",
     "typescript": "^5.2.2",
     "vite": "^5.1.6"
   }

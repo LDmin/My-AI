@@ -13,6 +13,8 @@ interface PromptState {
   updatePrompt: (id: string, title: string, content: string) => void
   deletePrompt: (id: string) => void
   getPrompt: (id: string) => Prompt | undefined
+  initPrompts: (prompts: Prompt[]) => void
+  savePrompts: () => void
 }
 
 // 默认提示词
@@ -38,6 +40,9 @@ export const usePromptStore = create<PromptState>()(
         set(state => ({ 
           prompts: [...state.prompts, newPrompt] 
         }))
+        
+        // 同步到uTools存储
+        get().savePrompts()
       },
       
       updatePrompt: (id, title, content) => {
@@ -46,16 +51,37 @@ export const usePromptStore = create<PromptState>()(
             p.id === id ? { ...p, title, content } : p
           )
         }))
+        
+        // 同步到uTools存储
+        get().savePrompts()
       },
       
       deletePrompt: (id) => {
         set(state => ({
           prompts: state.prompts.filter(p => p.id !== id)
         }))
+        
+        // 同步到uTools存储
+        get().savePrompts()
       },
       
       getPrompt: (id) => {
         return get().prompts.find(p => p.id === id)
+      },
+      
+      // 初始化提示词
+      initPrompts: (prompts) => {
+        if (prompts && prompts.length > 0) {
+          set({ prompts })
+        }
+      },
+      
+      // 保存提示词到uTools存储
+      savePrompts: () => {
+        const { prompts } = get()
+        if (window.savePrompts) {
+          window.savePrompts(prompts)
+        }
       }
     }),
     {
