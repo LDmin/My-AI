@@ -7,14 +7,26 @@ export interface Prompt {
   content: string
 }
 
+// 定义保存到uTools的数据结构
+interface PromptStorage {
+  prompts: Prompt[]
+  globalPrompt: string
+  useGlobalPrompt: boolean
+}
+
 interface PromptState {
   prompts: Prompt[]
+  globalPrompt: string
+  useGlobalPrompt: boolean
   addPrompt: (title: string, content: string) => void
   updatePrompt: (id: string, title: string, content: string) => void
   deletePrompt: (id: string) => void
   getPrompt: (id: string) => Prompt | undefined
   initPrompts: (prompts: Prompt[]) => void
   savePrompts: () => void
+  setGlobalPrompt: (content: string) => void
+  toggleGlobalPrompt: () => void
+  setUseGlobalPrompt: (use: boolean) => void
 }
 
 // 默认提示词
@@ -26,10 +38,15 @@ const defaultPrompts: Prompt[] = [
   { id: '5', title: '技术解释', content: '请用通俗易懂的语言解释什么是：' },
 ]
 
+// 默认全局提词
+const defaultGlobalPrompt = '你是一个有帮助的AI助手，请用简洁专业的语言回答我的问题。';
+
 export const usePromptStore = create<PromptState>()(
   persist(
     (set, get) => ({
       prompts: defaultPrompts,
+      globalPrompt: defaultGlobalPrompt,
+      useGlobalPrompt: false,
       
       addPrompt: (title, content) => {
         const newPrompt = {
@@ -69,6 +86,28 @@ export const usePromptStore = create<PromptState>()(
         return get().prompts.find(p => p.id === id)
       },
       
+      // 设置全局提词
+      setGlobalPrompt: (content) => {
+        set({ globalPrompt: content })
+        // 同步到本地存储
+        localStorage.setItem('global-prompt', content)
+      },
+      
+      // 切换是否使用全局提词
+      toggleGlobalPrompt: () => {
+        const newValue = !get().useGlobalPrompt
+        set({ useGlobalPrompt: newValue })
+        // 同步到本地存储
+        localStorage.setItem('use-global-prompt', String(newValue))
+      },
+      
+      // 设置是否使用全局提词
+      setUseGlobalPrompt: (use) => {
+        set({ useGlobalPrompt: use })
+        // 同步到本地存储
+        localStorage.setItem('use-global-prompt', String(use))
+      },
+      
       // 初始化提示词
       initPrompts: (prompts) => {
         if (prompts && prompts.length > 0) {
@@ -86,7 +125,11 @@ export const usePromptStore = create<PromptState>()(
     }),
     {
       name: 'prompt-storage', // localStorage的key
-      partialize: (state) => ({ prompts: state.prompts }), // 只持久化prompts数组
+      partialize: (state) => ({ 
+        prompts: state.prompts,
+        globalPrompt: state.globalPrompt,
+        useGlobalPrompt: state.useGlobalPrompt
+      }), 
     }
   )
 ) 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button, Input, List, Popconfirm, Form, Card, Typography, message, Space, Divider, theme } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { usePromptStore, Prompt } from '../store/promptStore'
@@ -8,10 +8,16 @@ const { Title, Paragraph, Text } = Typography
 const { useToken } = theme
 
 const PromptSettings: React.FC = () => {
-  const { prompts, addPrompt, updatePrompt, deletePrompt } = usePromptStore()
+  const { prompts, addPrompt, updatePrompt, deletePrompt, globalPrompt, setGlobalPrompt } = usePromptStore()
   const [editing, setEditing] = useState<string | null>(null)
   const [form] = Form.useForm()
+  const [globalPromptValue, setGlobalPromptValue] = useState(globalPrompt || '')
   const { token } = useToken()
+
+  // 初始化全局提词
+  useEffect(() => {
+    setGlobalPromptValue(globalPrompt || '')
+  }, [globalPrompt])
 
   const handleAdd = () => {
     form.resetFields()
@@ -47,22 +53,69 @@ const PromptSettings: React.FC = () => {
     })
   }
 
+  // 保存全局提词
+  const handleSaveGlobalPrompt = () => {
+    setGlobalPrompt(globalPromptValue)
+    message.success('全局提词已保存')
+  }
+
   return (
     <div style={{ padding: token.paddingLG, maxWidth: 800 }}>
       <Space direction="vertical" size={token.marginLG} style={{ width: '100%' }}>
         <div>
-          <Title level={3}>个人提词管理</Title>
+          <Title level={3}>提示词管理</Title>
           <Paragraph type="secondary">
-            添加常用提示词，在聊天时可以快速插入，提高与AI对话的效率
+            配置提示词以提高与AI对话的效率，全局提词将应用于所有对话
           </Paragraph>
         </div>
 
+        {/* 全局提词设置 */}
+        <Space direction="vertical" size={token.marginMD} style={{ width: '100%' }}>
+          <Title level={4}>全局提词</Title>
+          <Paragraph type="secondary">
+            全局提词会在每次对话开始时自动添加到对话上下文中，用于设置AI的行为模式和回答风格
+          </Paragraph>
+          
+          <Card 
+            style={{ 
+              marginBottom: token.marginMD, 
+              borderRadius: token.borderRadius,
+              backgroundColor: token.colorBgContainer,
+            }}
+            bordered
+          >
+            <Form layout="vertical">
+              <Form.Item
+                label="全局提词内容"
+                help="设置AI的全局行为规则，例如：'你是一个专业的程序员，请用简洁代码回答问题'"
+              >
+                <TextArea
+                  rows={6}
+                  value={globalPromptValue}
+                  onChange={(e) => setGlobalPromptValue(e.target.value)}
+                  placeholder="输入全局提词内容，它将作为系统指令应用于所有对话"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item>
+                <Button 
+                  type="primary" 
+                  onClick={handleSaveGlobalPrompt}
+                  disabled={!globalPromptValue || !globalPromptValue.trim()}
+                >
+                  保存全局提词
+                </Button>
+              </Form.Item>
+            </Form>
+          </Card>
+        </Space>
+
+        <Divider />
+
+        {/* 个人提词列表 */}
         <Space direction="vertical" size={token.marginMD} style={{ width: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Space>
-              <Text strong>我的提示词</Text>
-              <Text type="secondary">({prompts.length}个)</Text>
-            </Space>
+            <Title level={4}>个人提词列表</Title>
             <Button 
               type="primary" 
               icon={<PlusOutlined />} 
@@ -71,6 +124,10 @@ const PromptSettings: React.FC = () => {
               添加提示词
             </Button>
           </div>
+          
+          <Paragraph type="secondary">
+            个人提词用于在聊天时快速插入常用的提示语，提高对话效率
+          </Paragraph>
           
           {editing !== null && (
             <Card 
@@ -129,8 +186,8 @@ const PromptSettings: React.FC = () => {
                     编辑
                   </Button>,
                   <Popconfirm
-                    title="确定删除这个提示词？"
-                    description="删除后无法恢复"
+                    title="确认删除"
+                    description="确定要删除这个提示词？"
                     onConfirm={() => handleDelete(item.id)}
                     okText="确定"
                     cancelText="取消"
@@ -179,9 +236,10 @@ const PromptSettings: React.FC = () => {
         <div>
           <Title level={4}>使用说明</Title>
           <Paragraph type="secondary">
-            1. 提示词会在聊天界面顶部显示，点击即可快速插入<br />
-            2. 输入框中输入 / 也可查看所有提示词<br />
-            3. 提示词支持多行文本和格式，例如代码块等
+            1. 全局提词：应用于所有对话，设置AI的基本行为模式<br />
+            2. 个人提词：在聊天界面顶部显示，点击即可快速插入<br />
+            3. 输入框中输入 / 也可查看所有提示词<br />
+            4. 在对话界面底部可以开启/关闭全局提词功能
           </Paragraph>
         </div>
       </Space>

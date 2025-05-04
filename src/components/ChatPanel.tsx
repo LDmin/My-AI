@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Message, useChatStore } from "../store/chatStore";
 import { useSettingsStore, AIServiceType } from "../store/settingsStore";
-import { usePromptStore } from "../store/promptStore";
+import { usePromptStore, Prompt } from "../store/promptStore";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
@@ -17,6 +17,7 @@ import {
   Modal,
   Select,
   Badge,
+  Tag,
 } from "antd";
 import {
   RocketOutlined,
@@ -30,6 +31,9 @@ import {
   ReloadOutlined,
   EllipsisOutlined,
   ApiOutlined,
+  MessageOutlined,
+  BulbOutlined,
+  HighlightOutlined,
 } from "@ant-design/icons";
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
 import { AIServiceManager, AIServiceType as ServiceType, ChatRequest } from "../services";
@@ -393,7 +397,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
 const ChatPanel: React.FC = () => {
   const { sessions, currentSessionId, addMessage, deleteMessage } = useChatStore();
   const { ollama, siliconflow, serviceType, setOllama, setSiliconflow } = useSettingsStore();
-  const { prompts } = usePromptStore();
+  const { prompts, globalPrompt, useGlobalPrompt, toggleGlobalPrompt } = usePromptStore();
   const session = sessions.find((s) => s.id === currentSessionId);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [thinkingContent, setThinkingContent] = useState<string | null>(null);
@@ -545,45 +549,42 @@ const ChatPanel: React.FC = () => {
     }
   };
 
-  // 处理消息发送
+  // 处理发送消息
   const handleSendMessage = async (value: string) => {
     if (!value.trim() || !currentConfig.model || !session) return;
-    if (isGenerating) {
-      // 如果正在生成，则停止生成
-      handleStopGeneration();
-      return;
-    }
-
-    // 创建用户消息并添加到会话
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
+    
+    // 创建用户消息
+    const userMessage: Message = {
+      id: Date.now().toString(),
       content: value.trim(),
       role: "user",
       createAt: Date.now(),
       updateAt: Date.now(),
     };
-
-    addMessage(session.id, userMsg);
-
-    // 清空输入框和临时思考内容
+    
+    // 清空输入框并加入消息
     setInputValue("");
-    setThinkingContent(null);
-
-    // 开始生成AI回复
-    let streamId = `ai-${Date.now()}`;
+    addMessage(session.id, userMessage);
+    
+    // 自动滚动到底部
+    if (bubbleListRef.current) {
+      bubbleListRef.current.scrollTop = bubbleListRef.current.scrollHeight;
+    }
+    
+    // 标记为生成中，设置状态并创建中止控制器
+    setIsGenerating(true);
+    abortControllerRef.current = new AbortController();
+    
+    // 准备流式消息ID
+    const streamId = `stream-${Date.now()}`;
     let lastContent = "";
-    let finalThinkingContent = null;
-
+    let finalThinkingContent = "";
+    
     try {
-      // 设置生成状态
-      setIsGenerating(true);
-      
-      // 创建 AbortController 用于取消请求
-      abortControllerRef.current = new AbortController();
-      
+      // 获取AI服务实例
       // 获取当前服务类型
       const apiServiceType = serviceType === 'ollama' ? ServiceType.OLLAMA : ServiceType.SILICONFLOW;
-      
+       
       // 获取对应的AI服务
       const aiService = serviceManager.getService(
         apiServiceType, 
@@ -592,15 +593,34 @@ const ChatPanel: React.FC = () => {
           : { baseUrl: siliconflow.baseUrl, model: siliconflow.model, token: siliconflow.token } as SiliconflowServiceConfig
       );
       
-      // 构建消息历史
-      const messages = session.messages
-        .filter((m) => !m.id.startsWith("thinking-")) // 过滤掉思考消息
-        .concat(userMsg) // 添加当前用户消息
-        .map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
+      // 准备聊天历史消息
+      const historyMessages = [...(session.messages || [])];
+      
+      // 如果启用了全局提词，添加到消息历史开头
+      const messages = [];
+      if (useGlobalPrompt && globalPrompt.trim()) {
+        messages.push({
+          role: "system",
+          content: globalPrompt.trim()
+        });
+      }
+      
+      // 添加聊天历史
+      messages.push(
+        ...historyMessages
+          .filter(m => !m.id.startsWith("thinking-")) // 过滤掉思考消息
+          .map(m => ({
+            role: m.role,
+            content: m.content,
+          }))
+      );
+      
+      // 添加当前用户消息
+      messages.push({
+        role: userMessage.role,
+        content: userMessage.content
+      });
+      
       // 开始流式响应
       setStreamingContent("");
 
@@ -622,9 +642,9 @@ const ChatPanel: React.FC = () => {
       await aiService.chat(chatRequest);
 
       // 流式回复结束，保存最终回复
-      const msg: Message = {
-        id: streamId,
-        content: lastContent,
+          const msg: Message = {
+            id: streamId,
+            content: lastContent,
         role: "assistant",
         createAt: Date.now(),
         updateAt: Date.now(),
@@ -687,8 +707,8 @@ const ChatPanel: React.FC = () => {
       id: "stream",
       content: streamingContent,
       role: "assistant",
-      createAt: Date.now(),
-      updateAt: Date.now(),
+            createAt: Date.now(),
+            updateAt: Date.now(),
     });
   }
 
@@ -805,16 +825,7 @@ const ChatPanel: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: token.colorBgContainer,
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
+    <div className="chat-panel" style={{ position: "relative", height: "100%" }}>
       {/* 提示词列表弹窗 */}
       {renderPromptListModal()}
       
@@ -839,12 +850,17 @@ const ChatPanel: React.FC = () => {
         <Select
           value={currentConfig.model}
           onChange={handleModelChange}
-          style={{ width: 200 }}
           options={modelList.map(m => ({ label: m, value: m }))}
           placeholder="选择模型"
           size="small"
+          variant="filled"
           loading={modelList.length === 0}
           disabled={isGenerating}
+          showSearch
+          filterOption={(input, option) => 
+            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+          }
+          optionFilterProp="label"
         />
       </div>
       
@@ -887,10 +903,16 @@ const ChatPanel: React.FC = () => {
         </div>
       </div>
       
+      {/* 底部操作区域 */}
       <div
         style={{
-          padding: "16px 24px",
+          padding: `${token.paddingMD}px`,
+          backgroundColor: token.colorBgContainer,
           borderTop: `1px solid ${token.colorBorderSecondary}`,
+          position: "sticky",
+          bottom: 0,
+          // width: "100%",
+          zIndex: 10,
         }}
       >
         {/* 提示词按钮区域 */}
@@ -938,6 +960,31 @@ const ChatPanel: React.FC = () => {
           </div>
         )}
 
+        {/* 操作图标区域 */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'flex-start', 
+          alignItems: 'center',
+          marginBottom: token.marginXS
+        }}>
+          {/* 全局提词开关按钮 */}
+          <Tooltip title={useGlobalPrompt ? "已启用全局提词" : "点击启用全局提词"}>
+            <Tag
+              icon={<BulbOutlined />}
+              color={useGlobalPrompt ? "processing" : "default"}
+              style={{ 
+                cursor: 'pointer',
+                padding: '4px 8px',
+                borderRadius: token.borderRadiusSM,
+                marginRight: 0
+              }}
+              onClick={toggleGlobalPrompt}
+            />
+          </Tooltip>
+          
+          {/* 这里可以添加其他操作图标按钮 */}
+        </div>
+        
         {/* 输入框区域 */}
         <div style={{ position: "relative" }}>
           <Sender
@@ -946,7 +993,10 @@ const ChatPanel: React.FC = () => {
             onSubmit={isGenerating ? handleStopGeneration : handleSendMessage}
             placeholder="输入消息，或点击上方提示词快速插入"
             disabled={!currentConfig.model}
-            style={{ paddingRight: "16px" }}
+            style={{ 
+              paddingRight: "16px",
+              minHeight: "60px"
+            }}
             actions={(_, info) => {
               const { SendButton, LoadingButton } = info.components;
               return (
