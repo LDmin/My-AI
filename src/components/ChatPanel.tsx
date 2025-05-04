@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Message, useChatStore } from "../store/chatStore";
-import { useSettingsStore } from "../store/settingsStore";
+import { useSettingsStore, AIServiceType } from "../store/settingsStore";
 import { usePromptStore } from "../store/promptStore";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,6 +15,8 @@ import {
   Dropdown,
   Menu,
   Modal,
+  Select,
+  Badge,
 } from "antd";
 import {
   RocketOutlined,
@@ -27,9 +29,11 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   EllipsisOutlined,
+  ApiOutlined,
 } from "@ant-design/icons";
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
-import { AIServiceManager, AIServiceType, ChatRequest } from "../services";
+import { AIServiceManager, AIServiceType as ServiceType, ChatRequest } from "../services";
+import { SiliconflowServiceConfig } from "../services/SiliconflowService";
 
 const { Text, Paragraph } = Typography;
 const { useToken } = theme;
@@ -388,7 +392,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
 
 const ChatPanel: React.FC = () => {
   const { sessions, currentSessionId, addMessage, deleteMessage } = useChatStore();
-  const { ollama } = useSettingsStore();
+  const { ollama, siliconflow, serviceType, setOllama, setSiliconflow } = useSettingsStore();
   const { prompts } = usePromptStore();
   const session = sessions.find((s) => s.id === currentSessionId);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
@@ -400,6 +404,42 @@ const ChatPanel: React.FC = () => {
   const navigate = useNavigate();
   const { token } = useToken();
   const bubbleListRef = useRef<HTMLDivElement>(null);
+  
+  // 获取当前选择的配置
+  const currentConfig = serviceType === 'ollama' ? ollama : siliconflow;
+  
+  // 获取当前服务类型对应的模型列表
+  const [modelList, setModelList] = useState<string[]>([]);
+  
+  // 加载模型列表
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        // 获取AI服务管理器实例
+        const serviceManager = AIServiceManager.getInstance();
+        const apiServiceType = serviceType === 'ollama' ? ServiceType.OLLAMA : ServiceType.SILICONFLOW;
+        
+        // 使用当前配置创建服务实例
+        const service = serviceManager.getService(
+          apiServiceType,
+          serviceType === 'ollama' 
+            ? { baseUrl: ollama.baseUrl, model: ollama.model } 
+            : { baseUrl: siliconflow.baseUrl, model: siliconflow.model, token: siliconflow.token } as SiliconflowServiceConfig
+        );
+        
+        // 获取模型列表
+        const models = await service.getModels();
+        setModelList(models);
+      } catch (error) {
+        console.error('获取模型列表失败:', error);
+      }
+    };
+    
+    if ((serviceType === 'ollama' && ollama.baseUrl) || 
+        (serviceType === 'siliconflow' && siliconflow.token)) {
+      fetchModels();
+    }
+  }, [serviceType, ollama.baseUrl, siliconflow.token]);
   
   // 获取AI服务管理器实例
   const serviceManager = AIServiceManager.getInstance();
@@ -436,8 +476,32 @@ const ChatPanel: React.FC = () => {
     }
   }, [session?.messages, streamingContent, thinkingContent]);
 
+  // 处理模型选择变化
+  const handleModelChange = (selectedModel: string) => {
+    if (serviceType === 'ollama') {
+      setOllama({ ...ollama, model: selectedModel });
+    } else {
+      setSiliconflow({ ...siliconflow, model: selectedModel });
+    }
+    
+    // 显示提示
+    message.success(`已切换到模型: ${selectedModel}`);
+  };
+
+  // 获取服务名称显示
+  const getServiceName = () => {
+    switch (serviceType) {
+      case 'ollama': return 'Ollama';
+      case 'siliconflow': return '硅基流动';
+      case 'openai': return 'OpenAI';
+      case 'api2d': return 'API2D';
+      case 'azure': return 'Azure';
+      default: return serviceType;
+    }
+  };
+
   // 没有选择大模型时，显示提示
-  if (!ollama.model) {
+  if (!currentConfig.model) {
     return (
       <div
           style={{
@@ -483,7 +547,7 @@ const ChatPanel: React.FC = () => {
 
   // 处理消息发送
   const handleSendMessage = async (value: string) => {
-    if (!value.trim() || !ollama.model || !session) return;
+    if (!value.trim() || !currentConfig.model || !session) return;
     if (isGenerating) {
       // 如果正在生成，则停止生成
       handleStopGeneration();
@@ -517,13 +581,15 @@ const ChatPanel: React.FC = () => {
       // 创建 AbortController 用于取消请求
       abortControllerRef.current = new AbortController();
       
+      // 获取当前服务类型
+      const apiServiceType = serviceType === 'ollama' ? ServiceType.OLLAMA : ServiceType.SILICONFLOW;
+      
       // 获取对应的AI服务
       const aiService = serviceManager.getService(
-        AIServiceType.OLLAMA, 
-        { 
-          baseUrl: ollama.baseUrl, 
-          model: ollama.model 
-        }
+        apiServiceType, 
+        serviceType === 'ollama'
+          ? { baseUrl: ollama.baseUrl, model: ollama.model }
+          : { baseUrl: siliconflow.baseUrl, model: siliconflow.model, token: siliconflow.token } as SiliconflowServiceConfig
       );
       
       // 构建消息历史
@@ -542,7 +608,7 @@ const ChatPanel: React.FC = () => {
       const chatRequest: ChatRequest = {
         messages,
         signal: abortControllerRef.current.signal,
-            onStream: (text) => {
+        onStream: (text) => {
           lastContent = text;
           setStreamingContent(text);
         },
@@ -556,9 +622,9 @@ const ChatPanel: React.FC = () => {
       await aiService.chat(chatRequest);
 
       // 流式回复结束，保存最终回复
-          const msg: Message = {
-            id: streamId,
-            content: lastContent,
+      const msg: Message = {
+        id: streamId,
+        content: lastContent,
         role: "assistant",
         createAt: Date.now(),
         updateAt: Date.now(),
@@ -621,8 +687,8 @@ const ChatPanel: React.FC = () => {
       id: "stream",
       content: streamingContent,
       role: "assistant",
-            createAt: Date.now(),
-            updateAt: Date.now(),
+      createAt: Date.now(),
+      updateAt: Date.now(),
     });
   }
 
@@ -752,6 +818,36 @@ const ChatPanel: React.FC = () => {
       {/* 提示词列表弹窗 */}
       {renderPromptListModal()}
       
+      {/* 顶部模型选择区域 */}
+      <div style={{ 
+        padding: `${token.paddingSM}px ${token.paddingMD}px`,
+        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: token.marginXS }}>
+          <Badge 
+            status="processing" 
+            color={serviceType === 'ollama' ? '#52c41a' : '#1677ff'} 
+          />
+          <Text style={{ fontSize: token.fontSizeSM }}>
+            {getServiceName()}
+          </Text>
+        </div>
+        
+        <Select
+          value={currentConfig.model}
+          onChange={handleModelChange}
+          style={{ width: 200 }}
+          options={modelList.map(m => ({ label: m, value: m }))}
+          placeholder="选择模型"
+          size="small"
+          loading={modelList.length === 0}
+          disabled={isGenerating}
+        />
+      </div>
+      
       <div
         ref={bubbleListRef}
         style={{
@@ -790,13 +886,14 @@ const ChatPanel: React.FC = () => {
           })}
         </div>
       </div>
+      
       <div
         style={{
           padding: "16px 24px",
           borderTop: `1px solid ${token.colorBorderSecondary}`,
         }}
       >
-        {/* 提示词按钮区域 - 现在在底部 */}
+        {/* 提示词按钮区域 */}
         {prompts.length > 0 && (
           <div
             style={{
@@ -848,7 +945,7 @@ const ChatPanel: React.FC = () => {
             onChange={setInputValue}
             onSubmit={isGenerating ? handleStopGeneration : handleSendMessage}
             placeholder="输入消息，或点击上方提示词快速插入"
-            disabled={!ollama.model}
+            disabled={!currentConfig.model}
             style={{ paddingRight: "16px" }}
             actions={(_, info) => {
               const { SendButton, LoadingButton } = info.components;
@@ -863,7 +960,7 @@ const ChatPanel: React.FC = () => {
                   ) : (
                     <SendButton 
                       type="primary" 
-                      disabled={!inputValue.trim() || !ollama.model} 
+                      disabled={!inputValue.trim() || !currentConfig.model} 
                     />
                   )}
                 </div>

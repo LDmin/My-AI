@@ -1,15 +1,18 @@
 import { AIService, AIServiceConfig, AIServiceFactory } from "./AIService";
 import { OllamaService } from "./OllamaService";
+import { SiliconflowService, SiliconflowServiceConfig } from "./SiliconflowService";
 
 // 服务类型枚举
 export enum AIServiceType {
   OLLAMA = 'ollama',
+  SILICONFLOW = 'siliconflow',
   // 未来可以添加其他服务类型
 }
 
 // 服务工厂映射
 const serviceFactories: Record<AIServiceType, AIServiceFactory> = {
   [AIServiceType.OLLAMA]: (config) => new OllamaService(config),
+  [AIServiceType.SILICONFLOW]: (config) => new SiliconflowService(config as SiliconflowServiceConfig),
 };
 
 /**
@@ -38,7 +41,12 @@ export class AIServiceManager {
    * @param config 服务配置
    */
   public getService(type: AIServiceType, config: AIServiceConfig): AIService {
-    const serviceKey = `${type}-${config.baseUrl}-${config.model}`;
+    // 对于硅基流动服务，需要使用token作为缓存键的一部分
+    let serviceKey = `${type}-${config.baseUrl}-${config.model}`;
+    if (type === AIServiceType.SILICONFLOW) {
+      const siliconflowConfig = config as SiliconflowServiceConfig;
+      serviceKey = `${type}-${config.baseUrl}-${config.model}-${siliconflowConfig.token}`;
+    }
     
     // 检查缓存中是否已有服务实例
     if (this.services.has(serviceKey)) {
@@ -47,6 +55,15 @@ export class AIServiceManager {
       // 如果配置变更，更新配置
       if (service.getSelectedModel() !== config.model) {
         service.updateConfig(config);
+      }
+      
+      // 特殊处理硅基流动服务的token更新
+      if (type === AIServiceType.SILICONFLOW) {
+        const siliconflowService = service as SiliconflowService;
+        const siliconflowConfig = config as SiliconflowServiceConfig;
+        if (siliconflowService.getToken() !== siliconflowConfig.token) {
+          siliconflowService.updateToken(siliconflowConfig.token);
+        }
       }
       
       return service;

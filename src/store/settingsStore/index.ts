@@ -6,19 +6,34 @@ interface OllamaConfig {
   model: string
 }
 
+interface SiliconflowConfig {
+  baseUrl: string
+  model: string
+  token: string
+}
+
+// 服务类型定义
+export type AIServiceType = 'ollama' | 'siliconflow' | 'openai' | 'api2d' | 'azure';
+
 // 完整设置类型
 interface Settings {
   apiUrl: string
   model: string
   temperature: number
   darkMode: boolean
+  serviceType: AIServiceType
+  siliconflowToken: string
   [key: string]: any
 }
 
 interface SettingsState {
   ollama: OllamaConfig
+  siliconflow: SiliconflowConfig
   settings: Settings
+  serviceType: AIServiceType
   setOllama: (config: OllamaConfig) => void
+  setSiliconflow: (config: SiliconflowConfig) => void
+  setServiceType: (type: AIServiceType) => void
   setSettings: (settings: Settings) => void
   setTheme: (theme: 'light' | 'dark') => void
   initSettings: () => void
@@ -28,7 +43,9 @@ const defaultSettings: Settings = {
   apiUrl: 'http://localhost:11434',
   model: 'llama3',
   temperature: 0.7,
-  darkMode: false
+  darkMode: false,
+  serviceType: 'ollama',
+  siliconflowToken: ''
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -36,6 +53,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     baseUrl: 'http://localhost:11434',
     model: '',
   },
+  siliconflow: {
+    baseUrl: 'https://api.siliconflow.cn',
+    model: '',
+    token: ''
+  },
+  serviceType: 'ollama',
   settings: {...defaultSettings},
   
   setOllama: (config) => {
@@ -51,7 +74,45 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       window.saveSettings({
         ...current,
         apiUrl: config.baseUrl,
-        model: config.model
+        model: config.model,
+        serviceType: 'ollama'
+      })
+    }
+  },
+  
+  setSiliconflow: (config) => {
+    set({ siliconflow: config })
+    
+    // 保存配置到存储
+    saveData('siliconflow-baseUrl', config.baseUrl)
+    saveData('siliconflow-model', config.model)
+    saveData('siliconflow-token', config.token)
+    
+    // 同步到uTools配置
+    if (window.saveSettings) {
+      const current = get().settings
+      window.saveSettings({
+        ...current,
+        apiUrl: config.baseUrl,
+        model: config.model,
+        siliconflowToken: config.token,
+        serviceType: 'siliconflow'
+      })
+    }
+  },
+  
+  setServiceType: (type) => {
+    set({ serviceType: type })
+    
+    // 保存到存储
+    saveData('service-type', type)
+    
+    // 同步到uTools配置
+    if (window.saveSettings) {
+      const current = get().settings
+      window.saveSettings({
+        ...current,
+        serviceType: type
       })
     }
   },
@@ -99,11 +160,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (window.getSettings) {
         const uToolsSettings = window.getSettings()
         if (uToolsSettings) {
+          // 获取服务类型
+          const serviceType = uToolsSettings.serviceType || 'ollama'
+          
           set({ 
             settings: uToolsSettings,
+            serviceType,
             ollama: {
               baseUrl: uToolsSettings.apiUrl || 'http://localhost:11434',
-              model: uToolsSettings.model || ''
+              model: serviceType === 'ollama' ? (uToolsSettings.model || '') : ''
+            },
+            siliconflow: {
+              baseUrl: serviceType === 'siliconflow' ? (uToolsSettings.apiUrl || 'https://api.siliconflow.cn') : 'https://api.siliconflow.cn',
+              model: serviceType === 'siliconflow' ? (uToolsSettings.model || '') : '',
+              token: uToolsSettings.siliconflowToken || ''
             }
           })
           console.log('从uTools初始化配置成功:', uToolsSettings)
@@ -112,11 +182,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       
       // 否则使用本地存储
-      const model = getData('selected-model', '')
-      const baseUrl = getData('ollama-baseUrl', 'http://localhost:11434')
+      const serviceType = getData('service-type', 'ollama') as AIServiceType
       
-      if (model || baseUrl !== 'http://localhost:11434') {
+      if (serviceType === 'ollama') {
+        const model = getData('selected-model', '')
+        const baseUrl = getData('ollama-baseUrl', 'http://localhost:11434')
+        
         set({ 
+          serviceType,
           ollama: { 
             baseUrl, 
             model 
@@ -124,12 +197,33 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           settings: {
             ...defaultSettings,
             apiUrl: baseUrl,
-            model
+            model,
+            serviceType
           }
         })
+      } else {
+        const model = getData('siliconflow-model', '')
+        const baseUrl = getData('siliconflow-baseUrl', 'https://api.siliconflow.cn')
+        const token = getData('siliconflow-token', '')
         
-        console.log('从本地存储初始化配置成功:', { baseUrl, model })
+        set({ 
+          serviceType,
+          siliconflow: { 
+            baseUrl, 
+            model,
+            token
+          },
+          settings: {
+            ...defaultSettings,
+            apiUrl: baseUrl,
+            model,
+            siliconflowToken: token,
+            serviceType
+          }
+        })
       }
+      
+      console.log('从本地存储初始化配置成功:', { serviceType })
     } catch (err) {
       console.error('初始化配置失败:', err)
     }

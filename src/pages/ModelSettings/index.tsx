@@ -1,22 +1,36 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Form, Select, Card, Divider, Typography, Space, theme } from 'antd'
 import OllamaConfig from '../OllamaConfig'
+import SiliconflowConfig from '../SiliconflowConfig'
+import { useSettingsStore, AIServiceType } from '../../store/settingsStore'
 
 const { Option } = Select
 const { Title, Paragraph, Text } = Typography
 const { useToken } = theme
 
-type ModelType = 'ollama' | 'openai' | 'api2d' | 'azure'
-
 const ModelSettings: React.FC = () => {
-  const [modelType, setModelType] = useState<ModelType>('ollama')
+  const { serviceType, setServiceType } = useSettingsStore()
+  const [modelType, setModelType] = useState<AIServiceType>(serviceType)
   const { token } = useToken()
+  
+  // 当store中的serviceType变化时，同步更新modelType
+  useEffect(() => {
+    setModelType(serviceType)
+  }, [serviceType])
+
+  // 处理模型类型变化
+  const handleModelTypeChange = (type: AIServiceType) => {
+    setModelType(type)
+    setServiceType(type)
+  }
 
   // 根据模型类型渲染对应的配置组件
   const renderModelConfig = () => {
     switch (modelType) {
       case 'ollama':
         return <OllamaConfig />
+      case 'siliconflow':
+        return <SiliconflowConfig />
       case 'openai':
         return <Card title="OpenAI API 配置">敬请期待</Card>
       case 'api2d':
@@ -42,10 +56,11 @@ const ModelSettings: React.FC = () => {
           <Form.Item label="模型服务类型" required>
             <Select
               value={modelType}
-              onChange={(value: ModelType) => setModelType(value)}
+              onChange={handleModelTypeChange}
               style={{ width: 300 }}
             >
               <Option value="ollama">Ollama (本地模型)</Option>
+              <Option value="siliconflow">硅基流动 API</Option>
               <Option value="openai">OpenAI API</Option>
               <Option value="api2d">API2D (OpenAI代理)</Option>
               <Option value="azure">Azure OpenAI</Option>
