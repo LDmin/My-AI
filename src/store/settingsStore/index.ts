@@ -13,12 +13,13 @@ interface SiliconflowConfig {
 }
 
 // 网络搜索配置
-export type WebSearchType = 'none' | 'built-in' | 'bing' | 'google';
+export type WebSearchType = 'none' | 'bing' | 'google' | 'baidu';
 
 interface WebSearchConfig {
   enabled: boolean
   type: WebSearchType
-  apiKey?: string // 可能需要的API密钥
+  searchUrl?: string
+  userAgent?: string
 }
 
 // 服务类型定义
@@ -60,7 +61,7 @@ const defaultSettings: Settings = {
   siliconflowToken: '',
   webSearch: {
     enabled: false,
-    type: 'built-in'
+    type: 'bing'
   }
 }
 
@@ -76,7 +77,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   webSearch: {
     enabled: false,
-    type: 'built-in'
+    type: 'bing'
   },
   serviceType: 'ollama',
   settings: {...defaultSettings},
@@ -127,9 +128,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // 保存配置到存储
     saveData('web-search-enabled', config.enabled)
     saveData('web-search-type', config.type)
-    if (config.apiKey) {
-      saveData('web-search-apiKey', config.apiKey)
-    }
+    saveData('web-search-url', config.searchUrl)
+    saveData('web-search-useragent', config.userAgent)
     
     // 同步到uTools配置
     if (window.saveSettings) {
@@ -203,14 +203,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           // 获取服务类型
           const serviceType = uToolsSettings.serviceType || 'ollama'
           
-          // 获取网络搜索配置
-          const webSearch = uToolsSettings.webSearch || {
+          // 获取网络搜索配置，处理旧版本的'built-in'类型
+          let webSearch = uToolsSettings.webSearch || {
             enabled: false,
-            type: 'built-in'
+            type: 'bing'
+          }
+          
+          // 兼容处理：旧版本的built-in类型转换为bing
+          if (webSearch.type === 'built-in' || webSearch.type === 'none' || !['none', 'bing', 'google'].includes(webSearch.type as string)) {
+            webSearch = {
+              ...webSearch,
+              type: 'bing'
+            }
           }
           
           set({ 
-            settings: uToolsSettings,
+            settings: {
+              ...uToolsSettings,
+              webSearch // 更新处理后的webSearch
+            },
             serviceType,
             webSearch,
             ollama: {
@@ -233,13 +244,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       
       // 获取网络搜索配置
       const webSearchEnabled = getData('web-search-enabled', false)
-      const webSearchType = getData('web-search-type', 'built-in') as WebSearchType
-      const webSearchApiKey = getData('web-search-apiKey', '')
+      let webSearchType = getData('web-search-type', 'bing') as WebSearchType
+      const webSearchUrl = getData('web-search-url', undefined) as string | undefined
+      const webSearchUserAgent = getData('web-search-useragent', undefined) as string | undefined
+      
+      // 兼容处理：旧版本的built-in类型转换为bing
+      if (webSearchType === 'built-in' as any || !['none', 'bing', 'google'].includes(webSearchType as string)) {
+        webSearchType = 'bing';
+      }
       
       const webSearch = {
         enabled: webSearchEnabled,
         type: webSearchType,
-        apiKey: webSearchApiKey
+        searchUrl: webSearchUrl,
+        userAgent: webSearchUserAgent
       }
       
       if (serviceType === 'ollama') {

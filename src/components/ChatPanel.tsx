@@ -18,6 +18,7 @@ import {
   Select,
   Badge,
   Tag,
+  Spin,
 } from "antd";
 import {
   RocketOutlined,
@@ -39,6 +40,7 @@ import {
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
 import { AIServiceManager, AIServiceType as ServiceType, ChatRequest } from "../services";
 import { SiliconflowServiceConfig } from "../services/SiliconflowService";
+import { WebService, WebServiceConfig } from "../services/WebService";
 
 const { Text, Paragraph } = Typography;
 const { useToken } = theme;
@@ -241,6 +243,38 @@ const MessageContent = ({ content }: { content: string }) => {
   );
 };
 
+// 添加一个加载中组件
+const LoadingMessage = () => {
+  const { token } = useToken();
+  
+  return (
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      padding: token.paddingSM,
+      marginBottom: token.marginSM,
+      borderRadius: token.borderRadiusLG,
+      background: token.colorBgContainer
+    }}>
+      <Avatar
+        style={{ 
+          backgroundColor: token.colorPrimary,
+          marginRight: token.marginSM
+        }}
+        icon={<RobotOutlined />}
+      />
+      <Spin 
+        size="small" 
+        tip="AI正在思考中..." 
+        style={{ 
+          marginLeft: token.marginXS,
+          color: token.colorTextSecondary 
+        }} 
+      />
+    </div>
+  );
+};
+
 // 格式化时间显示
 const formatTime = (timestamp: number): string => {
   const date = new Date(timestamp);
@@ -409,6 +443,7 @@ const ChatPanel: React.FC = () => {
   const navigate = useNavigate();
   const { token } = useToken();
   const bubbleListRef = useRef<HTMLDivElement>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   // 获取当前选择的配置
   const currentConfig = serviceType === 'ollama' ? ollama : siliconflow;
@@ -536,7 +571,7 @@ const ChatPanel: React.FC = () => {
       setTimeout(() => {
         scrollToBottom();
         resizeThrottling = false;
-      }, 200);  // 减少触发频率
+      }, 100);  // 减少触发频率
     });
     
     if (bubbleListRef.current) {
@@ -658,10 +693,18 @@ const ChatPanel: React.FC = () => {
   const handleSendMessage = async (value: string) => {
     if (!value.trim() || !currentConfig.model || !session) return;
     
-    // 创建用户消息
+    // 函数：移除<think>标签及其中的内容
+    function removeThinkTags(text: string): string {
+      return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    }
+    
+    // 移除消息中的<think>标签及内容
+    const cleanedContent = removeThinkTags(value.trim());
+    
+    // 创建用户消息，使用清理后的内容
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: value.trim(),
+      content: value.trim(), // 保留原始内容显示，包括think标签
       role: "user",
       createAt: Date.now(),
       updateAt: Date.now(),
@@ -674,7 +717,8 @@ const ChatPanel: React.FC = () => {
     // 自动滚动到底部
     scrollToBottom();
     
-    // 标记为生成中，设置状态并创建中止控制器
+    // 标记为加载中和生成中
+    setIsLoading(true);
     setIsGenerating(true);
     abortControllerRef.current = new AbortController();
     
@@ -708,21 +752,93 @@ const ChatPanel: React.FC = () => {
         });
       }
       
-      // 添加聊天历史
+      // 添加聊天历史 (过滤掉思考消息)
       messages.push(
         ...historyMessages
           .filter(m => !m.id.startsWith("thinking-")) // 过滤掉思考消息
           .map(m => ({
             role: m.role,
-            content: m.content,
+            content: m.role === 'user' ? removeThinkTags(m.content) : m.content, // 用户消息移除<think>标签
           }))
       );
       
-      // 添加当前用户消息
+      // 添加当前用户消息 (使用清理后的内容)
       messages.push({
         role: userMessage.role,
-        content: userMessage.content
+        content: cleanedContent // 使用清理后的内容
       });
+
+      // 检查是否启用了网络搜索
+      if (webSearch.enabled) {
+        try {
+          // 获取WebService实例
+          const webService = WebService.getInstance();
+          
+          // 准备AI配置
+          const webAiConfig: WebServiceConfig = {
+            baseUrl: serviceType === 'ollama' ? ollama.baseUrl : siliconflow.baseUrl,
+            model: serviceType === 'ollama' ? ollama.model : siliconflow.model
+          };
+          
+          // 判断是否需要联网搜索
+          const needWebSearch = await webService.shouldUseWebSearch(userMessage.content, webAiConfig);
+          
+          if (needWebSearch) {
+            // 提取搜索关键词
+            const keywords = await webService.extractSearchKeywords(userMessage.content, webAiConfig);
+            
+            // 添加中间提示
+            const searchingMsg: Message = {
+              id: `searching-${Date.now()}`,
+              content: `🔍 **正在网络搜索**: ${keywords}`,
+              role: "assistant",
+              createAt: Date.now(),
+              updateAt: Date.now(),
+            };
+            addMessage(session.id, searchingMsg);
+            
+            // 处理兼容性问题：确保使用有效的搜索类型
+            const searchType = (webSearch.type as string) === 'built-in' ? 'bing' : webSearch.type;
+            
+            // 准备搜索配置
+            const searchConfig: Partial<WebServiceConfig> = {
+              baseUrl: webAiConfig.baseUrl,
+              model: webAiConfig.model,
+              // 从webSearch配置中获取参数
+              searchUrl: webSearch.searchUrl,
+              userAgent: webSearch.userAgent
+            };
+            
+            // 执行搜索
+            const searchResults = await webService.search(keywords, searchType, searchConfig);
+            
+            // 格式化搜索结果
+            const formattedResults = webService.formatSearchResultsForModel(searchResults);
+            
+            // 将搜索结果添加为系统消息
+            messages.push({
+              role: "system",
+              content: formattedResults
+            });
+            
+            // 添加搜索完成提示消息，稍后会被实际回复替换
+            const completedMsg: Message = {
+              id: `search-completed-${Date.now()}`,
+              content: "✅ **搜索完成**，正在生成回复...",
+              role: "assistant",
+              createAt: Date.now(),
+              updateAt: Date.now(),
+            };
+            
+            // 替换之前的搜索中消息
+            deleteMessage(session.id, searchingMsg.id);
+            addMessage(session.id, completedMsg);
+          }
+        } catch (error) {
+          console.error("执行网络搜索失败:", error);
+          // 搜索失败继续对话，不中断流程
+        }
+      }
       
       // 开始流式响应
       setStreamingContent("");
@@ -732,10 +848,18 @@ const ChatPanel: React.FC = () => {
         messages,
         signal: abortControllerRef.current.signal,
         onStream: (text) => {
+          // 当收到第一个流式响应时，关闭加载中状态
+          if (isLoading) {
+            setIsLoading(false);
+          }
           lastContent = text;
           setStreamingContent(text);
         },
         onThinking: (text) => {
+          // 当收到思考内容时，关闭加载中状态
+          if (isLoading) {
+            setIsLoading(false);
+          }
           finalThinkingContent = text; // 记录最终的思考内容
           setThinkingContent(text);
         }
@@ -788,6 +912,7 @@ const ChatPanel: React.FC = () => {
       setStreamingContent(null);
       setThinkingContent(null); // 清除思考内容，避免重复显示
       setIsGenerating(false);
+      setIsLoading(false); // 确保加载状态被重置
       abortControllerRef.current = null;
       // 对话完成后再次滚动到底部，确保显示完整对话
       setTimeout(scrollToBottom, 100);
@@ -941,7 +1066,7 @@ const ChatPanel: React.FC = () => {
     
     // 如果是开启状态，确保有默认搜索类型
     if (newConfig.enabled && newConfig.type === 'none') {
-      newConfig.type = 'built-in';
+      newConfig.type = 'bing';
     }
     
     // 更新设置
@@ -950,7 +1075,6 @@ const ChatPanel: React.FC = () => {
     // 显示提示消息
     if (newConfig.enabled) {
       const searchTypeText = {
-        'built-in': '插件自带搜索',
         'bing': 'Bing搜索',
         'google': 'Google搜索',
         'none': '无'
@@ -1052,6 +1176,9 @@ const ChatPanel: React.FC = () => {
               />
             );
           })}
+          
+          {/* 添加加载中提示 */}
+          {isLoading && <LoadingMessage />}
         </div>
       </div>
       
