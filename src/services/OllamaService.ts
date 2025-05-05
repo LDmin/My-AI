@@ -47,6 +47,12 @@ export class OllamaService extends AIService {
   async chat(request: ChatRequest): Promise<string> {
     const { messages, signal, onStream, onThinking } = request;
     
+    console.log('发送请求到Ollama，消息数量:', messages.length);
+    // 输出最后几条消息的角色，帮助调试
+    messages.slice(-3).forEach((msg, idx) => {
+      console.log(`最近消息 ${idx}:`, msg.role, msg.content.substring(0, 30) + '...');
+    });
+    
     const res = await fetch(`${this.config.baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

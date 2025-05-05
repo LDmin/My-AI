@@ -221,7 +221,7 @@ export class WebService {
    */
   public formatSearchResultsForModel(results: SearchResult[]): string {
     if (results.length === 0) {
-      return '未找到相关搜索结果。';
+      return '未找到相关搜索结果。请基于您的知识回答用户问题。';
     }
 
     let formattedText = '### 网络搜索结果\n\n';
@@ -232,7 +232,7 @@ export class WebService {
       formattedText += `来源: ${result.source} - [链接](${result.link})\n\n`;
     });
 
-    formattedText += '请基于以上实时搜索结果和您的知识来回答用户问题。';
+    formattedText += '请务必仔细阅读并充分利用以上网络搜索结果来回答用户的问题。这些是最新的实时信息，请优先使用这些信息构建您的回答，同时结合您的知识提供全面、准确的回复。不要忽略搜索结果中的重要信息。';
     return formattedText;
   }
 }

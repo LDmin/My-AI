@@ -19,6 +19,7 @@ import {
   Badge,
   Tag,
   Spin,
+  Popconfirm,
 } from "antd";
 import {
   RocketOutlined,
@@ -36,6 +37,7 @@ import {
   BulbOutlined,
   HighlightOutlined,
   GlobalOutlined,
+  ClearOutlined,
 } from "@ant-design/icons";
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
 import { AIServiceManager, AIServiceType as ServiceType, ChatRequest } from "../services";
@@ -430,7 +432,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
 };
 
 const ChatPanel: React.FC = () => {
-  const { sessions, currentSessionId, addMessage, deleteMessage } = useChatStore();
+  const { sessions, currentSessionId, addMessage, deleteMessage, clearMessages } = useChatStore();
   const { ollama, siliconflow, serviceType, webSearch, setOllama, setSiliconflow, setWebSearch } = useSettingsStore();
   const { prompts, globalPrompt, useGlobalPrompt, toggleGlobalPrompt } = usePromptStore();
   const session = sessions.find((s) => s.id === currentSessionId);
@@ -815,11 +817,24 @@ const ChatPanel: React.FC = () => {
             // 格式化搜索结果
             const formattedResults = webService.formatSearchResultsForModel(searchResults);
             
-            // 将搜索结果添加为系统消息
-            messages.push({
-              role: "system",
-              content: formattedResults
-            });
+            // 将搜索结果添加为用户消息的补充，而不是系统消息
+            // 创建一个特殊的用户消息，包含原始查询和搜索结果
+            const lastUserMessage = messages.pop(); // 移除最后一条用户消息
+            if (lastUserMessage && lastUserMessage.role === 'user') {
+              // 将搜索结果添加到用户消息中
+              messages.push({
+                role: "user",
+                content: `${lastUserMessage.content}\n\n${formattedResults}`
+              });
+            } else {
+              // 如果没有用户消息，将最后移除的消息放回去
+              if (lastUserMessage) messages.push(lastUserMessage);
+              // 然后添加系统消息
+              messages.push({
+                role: "system",
+                content: formattedResults
+              });
+            }
             
             // 添加搜索完成提示消息，稍后会被实际回复替换
             const completedMsg: Message = {
@@ -1077,13 +1092,33 @@ const ChatPanel: React.FC = () => {
       const searchTypeText = {
         'bing': 'Bing搜索',
         'google': 'Google搜索',
+        'baidu': '百度搜索',
         'none': '无'
-      }[newConfig.type];
+      }[newConfig.type] || '未知搜索引擎';
       
       message.success(`已启用联网搜索: ${searchTypeText}`);
     } else {
       message.info('已关闭联网搜索');
     }
+  };
+
+  // 处理清空所有消息
+  const handleClearAllMessages = () => {
+    if (!session) return;
+    
+    Modal.confirm({
+      title: "确认清空",
+      content: "确定要清空所有消息吗？此操作不可恢复。",
+      okText: "确定",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      onOk: () => {
+        clearMessages(session.id);
+        message.success("已清空所有消息");
+        // 清空消息后滚动到底部
+        setTimeout(scrollToBottom, 100);
+      },
+    });
   };
 
   return (
@@ -1115,21 +1150,33 @@ const ChatPanel: React.FC = () => {
           </Text>
         </div>
         
-        <Select
-          value={currentConfig.model}
-          onChange={handleModelChange}
-          options={modelList.map(m => ({ label: m, value: m }))}
-          placeholder="选择模型"
-          size="small"
-          variant="filled"
-          loading={modelList.length === 0}
-          disabled={isGenerating}
-          showSearch
-          filterOption={(input, option) => 
-            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-          }
-          optionFilterProp="label"
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: token.marginXS }}>
+          <Tooltip title="清空所有消息">
+            <Button
+              type="text"
+              size="small"
+              icon={<ClearOutlined />}
+              onClick={handleClearAllMessages}
+              disabled={!session || session.messages.length === 0 || isGenerating}
+            />
+          </Tooltip>
+          
+          <Select
+            value={currentConfig.model}
+            onChange={handleModelChange}
+            options={modelList.map(m => ({ label: m, value: m }))}
+            placeholder="选择模型"
+            size="small"
+            variant="filled"
+            loading={modelList.length === 0}
+            disabled={isGenerating}
+            showSearch
+            filterOption={(input, option) => 
+              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+            }
+            optionFilterProp="label"
+          />
+        </div>
       </div>
       
       <div

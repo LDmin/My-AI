@@ -20,6 +20,10 @@ li {
   margin-bottom: 8px;
   transition: background 0.2s, color 0.2s;
   color: var(--text-color);
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 li:hover, .active {
   background: #e6f7ff;
@@ -33,6 +37,27 @@ li.active {
   background: #16222c;
   color: #fff;
   font-weight: bold;
+}
+.sessionName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deleteIcon {
+  visibility: hidden;
+  color: #ff4d4f;
+  margin-left: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.deleteIcon:hover {
+  opacity: 1;
+}
+li:hover .deleteIcon {
+  visibility: visible;
 }
 .addBtn {
   margin-top: 12px;

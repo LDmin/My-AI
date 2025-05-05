@@ -19,8 +19,10 @@ interface ChatState {
   currentSessionId: string | null
   setCurrentSession: (id: string) => void
   addSession: (name: string) => void
+  deleteSession: (id: string) => void
   addMessage: (sessionId: string, message: Message) => void
   deleteMessage: (sessionId: string, messageId: string) => void
+  clearMessages: (sessionId: string) => void
   initSessions: (sessions: ChatSession[]) => void
   saveSessions: () => void
 }
@@ -75,6 +77,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessions: state.sessions.map(s =>
         s.id === sessionId 
           ? { ...s, messages: s.messages.filter(m => m.id !== messageId) } 
+          : s
+      )
+    }))
+    
+    // 保存到存储
+    get().saveSessions()
+  },
+  
+  // 删除会话
+  deleteSession: (id) => {
+    set(state => {
+      // 过滤掉要删除的会话
+      const filteredSessions = state.sessions.filter(s => s.id !== id)
+      
+      // 检查是否删除的是当前选中的会话
+      let newCurrentId = state.currentSessionId
+      
+      // 如果删除的是当前会话，则选择第一个会话（如果有）
+      if (id === state.currentSessionId) {
+        newCurrentId = filteredSessions.length > 0 ? filteredSessions[0].id : null
+      }
+      
+      return {
+        sessions: filteredSessions,
+        currentSessionId: newCurrentId
+      }
+    })
+    
+    // 保存到存储
+    get().saveSessions()
+  },
+  
+  // 清空指定会话的所有消息
+  clearMessages: (sessionId) => {
+    set(state => ({
+      sessions: state.sessions.map(s =>
+        s.id === sessionId 
+          ? { ...s, messages: [] } 
           : s
       )
     }))

@@ -210,7 +210,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           }
           
           // 兼容处理：旧版本的built-in类型转换为bing
-          if (webSearch.type === 'built-in' || webSearch.type === 'none' || !['none', 'bing', 'google'].includes(webSearch.type as string)) {
+          if (webSearch.type === 'built-in' || webSearch.type === 'none' || !['none', 'bing', 'google', 'baidu'].includes(webSearch.type as string)) {
             webSearch = {
               ...webSearch,
               type: 'bing'
@@ -249,7 +249,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const webSearchUserAgent = getData('web-search-useragent', undefined) as string | undefined
       
       // 兼容处理：旧版本的built-in类型转换为bing
-      if (webSearchType === 'built-in' as any || !['none', 'bing', 'google'].includes(webSearchType as string)) {
+      if (webSearchType === 'built-in' as any || !['none', 'bing', 'google', 'baidu'].includes(webSearchType as string)) {
         webSearchType = 'bing';
       }
       

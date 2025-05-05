@@ -46,6 +46,8 @@ export class BingSearchService extends AbstractSearchService {
       const searchUrl = this.getSearchUrl(query);
       const userAgent = this.getUserAgent();
       
+      console.log(`[BingSearch] 搜索URL: ${searchUrl}`);
+      
       // 执行HTTP请求
       const response = await fetch(searchUrl, {
         headers: {
@@ -57,6 +59,8 @@ export class BingSearchService extends AbstractSearchService {
       
       // 获取HTML内容
       const html = await response.text();
+      console.log(`[BingSearch] 获取到HTML长度: ${html.length}`);
+      
       const results: SearchResult[] = [];
       
       // Bing搜索结果解析
@@ -65,7 +69,21 @@ export class BingSearchService extends AbstractSearchService {
       
       let titleMatch;
       let index = 0;
-      while ((titleMatch = titleRegex.exec(html)) && index < 5) {
+      let matchCount = 0;
+      
+      // 提取标题匹配，记录所有匹配而不仅仅是前5个
+      const allMatches = [];
+      while (titleMatch = titleRegex.exec(html)) {
+        allMatches.push(titleMatch);
+        matchCount++;
+      }
+      
+      console.log(`[BingSearch] 找到标题匹配数量: ${matchCount}`);
+      
+      // 仅处理前5个匹配
+      for (index = 0; index < Math.min(allMatches.length, 5); index++) {
+        titleMatch = allMatches[index];
+        
         // 获取链接和标题
         const link = titleMatch[1];
         const title = this.stripHtmlTags(titleMatch[2]);
@@ -75,16 +93,17 @@ export class BingSearchService extends AbstractSearchService {
         const snippetMatch = snippetRegex.exec(snippetHTML);
         const snippet = snippetMatch ? this.stripHtmlTags(snippetMatch[1]) : '无可用摘要';
         
+        console.log(`[BingSearch] 结果 #${index + 1}: ${title.substring(0, 30)}...`);
+        
         results.push({
           title,
           link,
           snippet,
           source: this.getName()
         });
-        
-        index++;
       }
       
+      console.log(`[BingSearch] 返回结果数量: ${results.length}`);
       return results;
     } catch (error) {
       console.error('Bing搜索失败:', error);
