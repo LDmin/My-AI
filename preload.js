@@ -129,6 +129,13 @@ window.copyToClipboard = (text) => {
   return true
 }
 
+// 打开浏览器链接
+window.openBrowserLink = (url) => {
+  // 使用系统默认浏览器打开链接
+  window.utools.shellOpenExternal(url)
+  return true
+}
+
 // 获取系统信息
 window.getSystemInfo = () => {
   return {

@@ -61,9 +61,9 @@ const ModelSettings: React.FC = () => {
             >
               <Option value="ollama">Ollama (本地模型)</Option>
               <Option value="siliconflow">硅基流动 API</Option>
-              <Option value="openai">OpenAI API</Option>
+              {/* <Option value="openai">OpenAI API</Option>
               <Option value="api2d">API2D (OpenAI代理)</Option>
-              <Option value="azure">Azure OpenAI</Option>
+              <Option value="azure">Azure OpenAI</Option> */}
             </Select>
           </Form.Item>
         </Form>

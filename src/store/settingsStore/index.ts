@@ -13,13 +13,16 @@ interface SiliconflowConfig {
 }
 
 // 网络搜索配置
-export type WebSearchType = 'none' | 'bing' | 'google' | 'baidu';
+export type WebSearchType = 'none' | 'bing' | 'google' | 'baidu' | 'custom';
 
 interface WebSearchConfig {
   enabled: boolean
   type: WebSearchType
   searchUrl?: string
+  searchParam?: string  // 自定义搜索参数名，默认为"q"
   userAgent?: string
+  maxResults?: number
+  chunkSize?: number
 }
 
 // 服务类型定义
@@ -129,7 +132,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveData('web-search-enabled', config.enabled)
     saveData('web-search-type', config.type)
     saveData('web-search-url', config.searchUrl)
+    saveData('web-search-param', config.searchParam)
     saveData('web-search-useragent', config.userAgent)
+    saveData('web-search-max-results', config.maxResults)
+    saveData('web-search-chunk-size', config.chunkSize)
     
     // 同步到uTools配置
     if (window.saveSettings) {
@@ -210,11 +216,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           }
           
           // 兼容处理：旧版本的built-in类型转换为bing
-          if (webSearch.type === 'built-in' || webSearch.type === 'none' || !['none', 'bing', 'google', 'baidu'].includes(webSearch.type as string)) {
+          if (webSearch.type === 'built-in' || webSearch.type === 'none' || !['none', 'bing', 'google', 'baidu', 'custom'].includes(webSearch.type as string)) {
             webSearch = {
               ...webSearch,
               type: 'bing'
             }
+          }
+          
+          // 确保maxResults和chunkSize有默认值
+          webSearch = {
+            ...webSearch,
+            maxResults: webSearch.maxResults || 3,
+            chunkSize: webSearch.chunkSize || 100
           }
           
           set({ 
@@ -246,10 +259,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const webSearchEnabled = getData('web-search-enabled', false)
       let webSearchType = getData('web-search-type', 'bing') as WebSearchType
       const webSearchUrl = getData('web-search-url', undefined) as string | undefined
+      const webSearchParam = getData('web-search-param', 'q') as string | undefined
       const webSearchUserAgent = getData('web-search-useragent', undefined) as string | undefined
+      const webSearchMaxResults = getData('web-search-max-results', 3) as number
+      const webSearchChunkSize = getData('web-search-chunk-size', 100) as number
       
       // 兼容处理：旧版本的built-in类型转换为bing
-      if (webSearchType === 'built-in' as any || !['none', 'bing', 'google', 'baidu'].includes(webSearchType as string)) {
+      if (webSearchType === 'built-in' as any || !['none', 'bing', 'google', 'baidu', 'custom'].includes(webSearchType as string)) {
         webSearchType = 'bing';
       }
       
@@ -257,7 +273,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         enabled: webSearchEnabled,
         type: webSearchType,
         searchUrl: webSearchUrl,
-        userAgent: webSearchUserAgent
+        searchParam: webSearchParam,
+        userAgent: webSearchUserAgent,
+        maxResults: webSearchMaxResults,
+        chunkSize: webSearchChunkSize
       }
       
       if (serviceType === 'ollama') {

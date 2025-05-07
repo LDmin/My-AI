@@ -45,7 +45,7 @@ export class OllamaService extends AIService {
    * 发送聊天消息并获取流式响应
    */
   async chat(request: ChatRequest): Promise<string> {
-    const { messages, signal, onStream, onThinking } = request;
+    const { messages, signal, onStream, onThinking, sessionId } = request;
     
     console.log('发送请求到Ollama，消息数量:', messages.length);
     // 输出最后几条消息的角色，帮助调试
@@ -53,80 +53,101 @@ export class OllamaService extends AIService {
       console.log(`最近消息 ${idx}:`, msg.role, msg.content.substring(0, 30) + '...');
     });
     
-    const res = await fetch(`${this.config.baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.config.model,
-        messages,
-        stream: true
-      }),
-      signal
-    });
+    // 创建一个自定义的AbortController，如果未提供signal
+    const controller = signal ? null : new AbortController();
+    const finalSignal = signal || controller?.signal;
     
-    // 检查响应状态码，如果不是成功状态，抛出错误
-    if (!res.ok) {
-      throw new Error(`API请求失败，状态码: ${res.status}, 错误信息: ${res.statusText}`);
+    // 如果提供了会话ID，则将请求添加到活跃请求列表
+    if (sessionId && controller) {
+      this.addActiveRequest(sessionId, controller);
+      console.log(`[Ollama] 添加会话 ${sessionId} 的请求到活跃列表`);
     }
-    
-    const reader = res.body?.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let fullText = '';
-    let thinking = '';
-    
-    if (!reader) return fullText;
     
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        // 解码获取到的数据块
-        const chunk = decoder.decode(value, { stream: true });
-        
-        // 处理返回的JSON行
-        const lines = chunk.split('\n').filter(line => line.trim());
-        
-        for (const line of lines) {
-          try {
-            // 解析JSON
-            const data = JSON.parse(line);
-            
-            // 检查是否包含消息内容
-            if (data.message && data.message.content) {
-              // 累加消息内容
-              fullText += data.message.content;
+      const res = await fetch(`${this.config.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.config.model,
+          messages,
+          stream: true
+        }),
+        signal: finalSignal
+      });
+      
+      // 检查响应状态码，如果不是成功状态，抛出错误
+      if (!res.ok) {
+        throw new Error(`API请求失败，状态码: ${res.status}, 错误信息: ${res.statusText}`);
+      }
+      
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let fullText = '';
+      let thinking = '';
+      
+      if (!reader) return fullText;
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          // 解码获取到的数据块
+          const chunk = decoder.decode(value, { stream: true });
+          
+          // 处理返回的JSON行
+          const lines = chunk.split('\n').filter(line => line.trim());
+          
+          for (const line of lines) {
+            try {
+              // 解析JSON
+              const data = JSON.parse(line);
               
-              // 处理<think>标签
-              const processed = processThinkContent(fullText);
-              
-              // 调用回调函数更新UI
-              if (onStream && processed.content) {
-                onStream(processed.content);
+              // 检查是否包含消息内容
+              if (data.message && data.message.content) {
+                // 累加消息内容
+                fullText += data.message.content;
+                
+                // 处理<think>标签
+                const processed = processThinkContent(fullText);
+                
+                // 调用回调函数更新UI
+                if (onStream && processed.content) {
+                  onStream(processed.content);
+                }
+                
+                // 如果有思考内容并且提供了处理函数
+                if (onThinking && processed.thinking && processed.thinking !== thinking) {
+                  thinking = processed.thinking;
+                  onThinking(thinking);
+                }
               }
-              
-              // 如果有思考内容并且提供了处理函数
-              if (onThinking && processed.thinking && processed.thinking !== thinking) {
-                thinking = processed.thinking;
-                onThinking(thinking);
-              }
+            } catch (e) {
+              console.error('JSON解析错误:', line, e);
             }
-          } catch (e) {
-            console.error('JSON解析错误:', line, e);
           }
         }
+      } catch (error) {
+        // 检查是否是中止错误
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          console.log(`[Ollama] 请求被中止`);
+          throw error; // 继续抛出中止错误，让调用者知道请求被中止
+        }
+        console.error('流式读取错误:', error);
       }
+      
+      // 最终处理一次，确保返回的是去除思考部分的内容
+      const finalProcessed = processThinkContent(fullText);
+      return finalProcessed.content;
     } catch (error) {
-      // 检查是否是中止错误
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw error; // 继续抛出中止错误，让调用者知道请求被中止
+      throw error;
+    } finally {
+      // 如果提供了会话ID，从活跃请求列表中移除
+      if (sessionId && controller) {
+        this.removeActiveRequest(sessionId, controller);
+        console.log(`[Ollama] 从活跃列表中移除会话 ${sessionId} 的请求`);
       }
-      console.error('流式读取错误:', error);
     }
-    
-    // 最终处理一次，确保返回的是去除思考部分的内容
-    const finalProcessed = processThinkContent(fullText);
-    return finalProcessed.content;
   }
 
   /**

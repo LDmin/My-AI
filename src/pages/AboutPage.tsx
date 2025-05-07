@@ -14,7 +14,7 @@ const AboutPage: React.FC = () => {
         <div>
           <Title level={3}>关于 myAI</Title>
           <Paragraph type="secondary">
-            myAI 是一个基于 React + TypeScript + Zustand + Ollama + Vite + Ant Design + chat-pro 构建的本地大语言模型对话工具，
+            myAI 是一个基于 React + TypeScript + Zustand + Ollama + Vite + Ant Design + @ant-design/x 构建的本地大语言模型对话工具，
             提供简洁高效的多会话管理和深色模式支持。
           </Paragraph>
         </div>
@@ -26,7 +26,7 @@ const AboutPage: React.FC = () => {
             <Tag color="green">TypeScript</Tag>
             <Tag color="purple">Zustand</Tag>
             <Tag color="gold">Ant Design</Tag>
-            <Tag color="cyan">chat-pro</Tag>
+            <Tag color="cyan">@ant-design/x</Tag>
             <Tag color="magenta">Vite</Tag>
             <Tag color="volcano">Ollama</Tag>
           </Space>

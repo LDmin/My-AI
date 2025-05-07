@@ -66,6 +66,7 @@ export class BingSearchService extends AbstractSearchService {
       // Bing搜索结果解析
       const titleRegex = /<h2><a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a><\/h2>/gi;
       const snippetRegex = /<p[^>]*>(.*?)<\/p>/gi;
+      const contentRegex = /<div[^>]*class="b_caption"[^>]*>([\s\S]*?)<\/div>/gi;
       
       let titleMatch;
       let index = 0;
@@ -81,7 +82,7 @@ export class BingSearchService extends AbstractSearchService {
       console.log(`[BingSearch] 找到标题匹配数量: ${matchCount}`);
       
       // 仅处理前5个匹配
-      for (index = 0; index < Math.min(allMatches.length, 5); index++) {
+      for (index = 0; index < allMatches.length; index++) {
         titleMatch = allMatches[index];
         
         // 获取链接和标题
@@ -93,12 +94,37 @@ export class BingSearchService extends AbstractSearchService {
         const snippetMatch = snippetRegex.exec(snippetHTML);
         const snippet = snippetMatch ? this.stripHtmlTags(snippetMatch[1]) : '无可用摘要';
         
-        console.log(`[BingSearch] 结果 #${index + 1}: ${title.substring(0, 30)}...`);
+        // 查找更完整的内容
+        let description = '';
+        const contentHTML = html.substring(titleMatch.index, titleMatch.index + 1000);
+        const contentMatch = contentRegex.exec(contentHTML);
+        
+        if (contentMatch) {
+          // 提取所有段落内容
+          const paragraphs = [];
+          const paraRegex = /<p[^>]*>(.*?)<\/p>/gi;
+          let paraMatch;
+          
+          const contentText = contentMatch[1];
+          while (paraMatch = paraRegex.exec(contentText)) {
+            const paraText = this.stripHtmlTags(paraMatch[1]).trim();
+            if (paraText && paraText.length > 20) {
+              paragraphs.push(paraText);
+            }
+          }
+          
+          if (paragraphs.length > 0) {
+            description = paragraphs.join('\n\n');
+          }
+        }
+        
+        console.log(`[BingSearch] 结果 #${index + 1}: ${title}...${description}`);
         
         results.push({
           title,
           link,
           snippet,
+          description,
           source: this.getName()
         });
       }

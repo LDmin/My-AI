@@ -66,6 +66,7 @@ export class BaiduSearchService extends AbstractSearchService {
       // 百度搜索结果解析 - 更新正则表达式以更广泛匹配
       const titleRegex = /<h3[^>]*>(?:<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>|<a[^>]*>(.*?)<\/a>.*?<a[^>]*href="([^"]*)"[^>]*>)/gi;
       const snippetRegex = /<div[^>]*class="[^"]*c-abstract[^"]*"[^>]*>(.*?)<\/div>|<div[^>]*class="[^"]*c-span[^"]*"[^>]*>(.*?)<\/div>/gi;
+      const contentRegex = /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>|<div[^>]*class="[^"]*c-container[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
       
       let titleMatch;
       let matchCount = 0;
@@ -139,6 +140,52 @@ export class BaiduSearchService extends AbstractSearchService {
           }
         }
         
+        // 提取更详细的内容
+        let description = '';
+        const contentHTML = html.substring(titleMatch.index - 200, titleMatch.index + 1000);
+        const contentMatches = [...contentHTML.matchAll(contentRegex)];
+        
+        if (contentMatches.length > 0) {
+          // 收集所有可能的内容段落
+          const paragraphs: string[] = [];
+          
+          for (const contentMatch of contentMatches) {
+            const contentText = this.stripHtmlTags(contentMatch[1] || contentMatch[2] || '').trim();
+            if (contentText && contentText.length > 50 && !paragraphs.includes(contentText)) {
+              paragraphs.push(contentText);
+              
+              // 最多收集5个段落
+              if (paragraphs.length >= 5) break;
+            }
+          }
+          
+          if (paragraphs.length > 0) {
+            description = paragraphs.join('\n\n');
+          }
+        }
+        
+        // 如果仍未找到内容，尝试从其他元素提取
+        if (!description) {
+          const paraRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+          const paraMatches = [...contentHTML.matchAll(paraRegex)];
+          
+          const contentTexts: string[] = [];
+          for (const paraMatch of paraMatches) {
+            const paraText = this.stripHtmlTags(paraMatch[1]).trim();
+            if (paraText && paraText.length > 50 && !contentTexts.includes(paraText) && 
+                !paraText.includes('百度') && !paraText.includes('搜索')) {
+              contentTexts.push(paraText);
+              
+              // 最多收集3个段落
+              if (contentTexts.length >= 3) break;
+            }
+          }
+          
+          if (contentTexts.length > 0) {
+            description = contentTexts.join('\n\n');
+          }
+        }
+        
         // 处理摘要长度
         if (snippet.length > 200) {
           snippet = snippet.substring(0, 197) + '...';
@@ -152,6 +199,7 @@ export class BaiduSearchService extends AbstractSearchService {
             title,
             link,
             snippet: snippet || '无可用摘要',
+            description,
             source: this.getName()
           });
         }

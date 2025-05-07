@@ -67,6 +67,7 @@ export class GoogleSearchService extends AbstractSearchService {
       const titleRegex = /<h3[^>]*>(.*?)<\/h3>/gi;
       const linkRegex = /<a href="([^"]*)"[^>]*>/gi;
       const snippetRegex = /<div[^>]*class="[^"]*"[^>]*>(.*?)<\/div>/gi;
+      const contentRegex = /<div[^>]*class="[^"]*"[^>]*>([\s\S]*?)(?:<div[^>]*class="[^"]*"[^>]*>|<\/div>)/gi;
       
       let match;
       let matchCount = 0;
@@ -135,12 +136,58 @@ export class GoogleSearchService extends AbstractSearchService {
           }
         }
         
+        // 提取更详细的内容
+        let description = '';
+        const expandedHtml = html.substring(titleMatch.index, titleMatch.index + 1500);
+        const contentMatches = [...expandedHtml.matchAll(contentRegex)];
+        
+        if (contentMatches.length > 0) {
+          // 收集所有可能的内容段落
+          const paragraphs: string[] = [];
+          
+          for (const contentMatch of contentMatches) {
+            const contentText = this.stripHtmlTags(contentMatch[1]).trim();
+            if (contentText && contentText.length > 50 && !paragraphs.includes(contentText)) {
+              paragraphs.push(contentText);
+              
+              // 最多收集5个段落
+              if (paragraphs.length >= 5) break;
+            }
+          }
+          
+          if (paragraphs.length > 0) {
+            description = paragraphs.join('\n\n');
+          }
+        }
+        
+        // 如果没有找到详细内容，尝试从其他元素提取
+        if (!description) {
+          const spanRegex = /<span[^>]*>([\s\S]*?)<\/span>/gi;
+          const spanMatches = [...expandedHtml.matchAll(spanRegex)];
+          
+          const contentTexts: string[] = [];
+          for (const spanMatch of spanMatches) {
+            const spanText = this.stripHtmlTags(spanMatch[1]).trim();
+            if (spanText && spanText.length > 70 && !contentTexts.includes(spanText)) {
+              contentTexts.push(spanText);
+              
+              // 最多收集3个
+              if (contentTexts.length >= 3) break;
+            }
+          }
+          
+          if (contentTexts.length > 0) {
+            description = contentTexts.join('\n\n');
+          }
+        }
+        
         console.log(`[GoogleSearch] 结果 #${index + 1}: ${title.substring(0, 30)}...`);
         
         results.push({
           title,
           link,
           snippet: snippet || '无可用摘要',
+          description,
           source: this.getName()
         });
       }

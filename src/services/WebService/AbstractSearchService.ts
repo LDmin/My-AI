@@ -4,6 +4,16 @@ export interface SearchResult {
   link: string;
   snippet: string;
   source: string;
+  description?: string; // 结果正文内容
+  savedHtml?: string;   // 用于存储已获取的HTML内容，避免重复获取
+}
+
+// 原始HTML搜索结果类型
+export interface RawHtmlSearchResult {
+  searchUrl: string;   // 搜索URL
+  html: string;        // 原始HTML内容
+  source: string;      // 搜索引擎来源
+  query: string;       // 搜索查询
 }
 
 // 搜索服务配置
@@ -60,5 +70,42 @@ export abstract class AbstractSearchService {
    */
   protected stripHtmlTags(html: string): string {
     return html.replace(/<[^>]*>/g, '');
+  }
+  
+  /**
+   * 清理HTML并提取正文文本
+   * @param html 原始HTML文本
+   * @returns 清理后的纯文本内容
+   */
+  protected extractTextFromHtml(html: string): string {
+    try {
+      if (!html) return '';
+      
+      // 1. 移除所有样式标签及其内容
+      let cleanedHtml = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+      
+      // 2. 移除所有脚本标签及其内容
+      cleanedHtml = cleanedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+      
+      // 3. 移除所有行内样式属性
+      cleanedHtml = cleanedHtml.replace(/\s+style="[^"]*"/gi, '');
+      cleanedHtml = cleanedHtml.replace(/\s+style='[^']*'/gi, '');
+      
+      // 4. 提取body内容
+      const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(cleanedHtml);
+      const bodyContent = bodyMatch ? bodyMatch[1] : cleanedHtml;
+      
+      // 5. 移除所有剩余的HTML标签
+      const textContent = this.stripHtmlTags(bodyContent);
+      
+      // 6. 处理空白字符：合并多个空格、换行等
+      return textContent
+        .replace(/\s+/g, ' ')
+        .replace(/\n+/g, '\n')
+        .trim();
+    } catch (error) {
+      console.error('提取HTML文本失败:', error);
+      return this.stripHtmlTags(html); // 降级处理，直接去除所有标签
+    }
   }
 } 

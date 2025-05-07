@@ -43,6 +43,6 @@
 使用pnpm安装依赖，使用之前先执行代理 export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890
 无需运行项目，我自己会运行
 添加update.md文件，记录所有更新内容,包括时间
-使用react + ts + chat-pro + Zustand + ollama + vite + antd构建整个插件
+使用react + ts + @ant-design/x + Zustand + ollama + vite + antd构建整个插件
 界面应该左中右结构，左侧是菜单栏（一级菜单），中间是对话列表（二级菜单），右侧是聊天对话框，具体参照files文件夹下的截图
 

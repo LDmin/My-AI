@@ -38,11 +38,12 @@ import {
   HighlightOutlined,
   GlobalOutlined,
   ClearOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { Bubble, Sender, Suggestion } from "@ant-design/x";
-import { AIServiceManager, AIServiceType as ServiceType, ChatRequest } from "../services";
-import { SiliconflowServiceConfig } from "../services/SiliconflowService";
+import { AIServiceManager, ChatRequest, SiliconflowServiceConfig } from "../services";
 import { WebService, WebServiceConfig } from "../services/WebService";
+import { AIServiceType as ServiceType } from "../services/AIServiceManager";
 
 const { Text, Paragraph } = Typography;
 const { useToken } = theme;
@@ -175,7 +176,7 @@ const MessageContent = ({ content }: { content: string }) => {
     formattedText = formattedText.replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
       (match, text, url) => {
-        return `<a href="${url}" target="_blank" style="color: ${token.colorPrimary}; text-decoration: none;">${text}</a>`;
+        return `<a href="javascript:void(0)" onclick="window.openBrowserLink('${url}')" style="color: ${token.colorPrimary}; text-decoration: none;">${text}</a>`;
       }
     );
 
@@ -477,6 +478,7 @@ const ChatPanel: React.FC = () => {
       }
     };
     
+    // 只有在有基础URL或token时才检查模型可用性
     if ((serviceType === 'ollama' && ollama.baseUrl) || 
         (serviceType === 'siliconflow' && siliconflow.token)) {
       fetchModels();
@@ -683,12 +685,39 @@ const ChatPanel: React.FC = () => {
 
   // 处理停止生成
   const handleStopGeneration = () => {
+    if (!session) return;
+    
+    console.log(`终止会话 ${session.id} 的所有请求`);
+    
+    // 使用当前的AbortController终止请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
-      setIsGenerating(false);
-      message.info("已停止生成");
     }
+    
+    // 获取AI服务实例，终止相关请求
+    const apiServiceType = serviceType === 'ollama' ? ServiceType.OLLAMA : ServiceType.SILICONFLOW;
+    const aiService = serviceManager.getService(
+      apiServiceType, 
+      serviceType === 'ollama'
+        ? { baseUrl: ollama.baseUrl, model: ollama.model }
+        : { baseUrl: siliconflow.baseUrl, model: siliconflow.model, token: siliconflow.token } as SiliconflowServiceConfig
+    );
+    
+    // 终止AI服务的请求
+    aiService.cancelRequests(session.id);
+    
+    // 获取WebService实例，终止相关请求
+    const webService = WebService.getInstance();
+    webService.cancelRequests(session.id);
+    
+    // 更新UI状态
+      setIsGenerating(false);
+    setIsLoading(false);
+    setStreamingContent(null);
+    setThinkingContent(null);
+    
+      message.info("已停止生成");
   };
 
   // 处理发送消息
@@ -731,11 +760,8 @@ const ChatPanel: React.FC = () => {
     
     try {
       // 获取AI服务实例
-      // 获取当前服务类型
       const apiServiceType = serviceType === 'ollama' ? ServiceType.OLLAMA : ServiceType.SILICONFLOW;
-       
-      // 获取对应的AI服务
-      const aiService = serviceManager.getService(
+      const service = serviceManager.getService(
         apiServiceType, 
         serviceType === 'ollama'
           ? { baseUrl: ollama.baseUrl, model: ollama.model }
@@ -779,77 +805,72 @@ const ChatPanel: React.FC = () => {
           // 准备AI配置
           const webAiConfig: WebServiceConfig = {
             baseUrl: serviceType === 'ollama' ? ollama.baseUrl : siliconflow.baseUrl,
-            model: serviceType === 'ollama' ? ollama.model : siliconflow.model
+            model: serviceType === 'ollama' ? ollama.model : siliconflow.model,
+            // 从webSearch配置中获取参数
+            searchUrl: webSearch.searchUrl,
+            userAgent: webSearch.userAgent,
+            maxResults: webSearch.maxResults,
           };
           
-          // 判断是否需要联网搜索
-          const needWebSearch = await webService.shouldUseWebSearch(userMessage.content, webAiConfig);
-          
+          // 合并分析：一次请求获取是否需要联网、关键词、要求、问题
+          const { needWebSearch, keywords, requirement, question } = await webService.analyzeUserQuery(userMessage.content, webAiConfig);
+          console.log('%c [ needWebSearch, keywords, requirement, question ]-817-「components/ChatPanel.tsx」', 'font-size:13px; background:pink; color:#bf2c9f;', needWebSearch, keywords, requirement, question)
+
           if (needWebSearch) {
-            // 提取搜索关键词
-            const keywords = await webService.extractSearchKeywords(userMessage.content, webAiConfig);
-            
             // 添加中间提示
             const searchingMsg: Message = {
               id: `searching-${Date.now()}`,
-              content: `🔍 **正在网络搜索**: ${keywords}`,
+              content: `🔍 **正在网络搜索**: ${keywords || userMessage.content}`,
               role: "assistant",
               createAt: Date.now(),
               updateAt: Date.now(),
             };
             addMessage(session.id, searchingMsg);
-            
             // 处理兼容性问题：确保使用有效的搜索类型
             const searchType = (webSearch.type as string) === 'built-in' ? 'bing' : webSearch.type;
-            
-            // 准备搜索配置
-            const searchConfig: Partial<WebServiceConfig> = {
-              baseUrl: webAiConfig.baseUrl,
-              model: webAiConfig.model,
-              // 从webSearch配置中获取参数
-              searchUrl: webSearch.searchUrl,
-              userAgent: webSearch.userAgent
-            };
-            
             // 执行搜索
-            const searchResults = await webService.search(keywords, searchType, searchConfig);
-            
-            // 格式化搜索结果
+            const searchResults = await webService.search(keywords || userMessage.content, searchType, webAiConfig);
+            // 将搜索结果格式化为可读文本
             const formattedResults = webService.formatSearchResultsForModel(searchResults);
-            
-            // 将搜索结果添加为用户消息的补充，而不是系统消息
-            // 创建一个特殊的用户消息，包含原始查询和搜索结果
-            const lastUserMessage = messages.pop(); // 移除最后一条用户消息
-            if (lastUserMessage && lastUserMessage.role === 'user') {
-              // 将搜索结果添加到用户消息中
-              messages.push({
-                role: "user",
-                content: `${lastUserMessage.content}\n\n${formattedResults}`
-              });
-            } else {
-              // 如果没有用户消息，将最后移除的消息放回去
-              if (lastUserMessage) messages.push(lastUserMessage);
-              // 然后添加系统消息
-              messages.push({
-                role: "system",
-                content: formattedResults
-              });
-            }
-            
-            // 添加搜索完成提示消息，稍后会被实际回复替换
-            const completedMsg: Message = {
-              id: `search-completed-${Date.now()}`,
-              content: "✅ **搜索完成**，正在生成回复...",
+            // 更新搜索状态消息为"正在分析搜索结果"
+            deleteMessage(session.id, searchingMsg.id);
+            const analyzingMsg: Message = {
+              id: `analyzing-${Date.now()}`,
+              content: `🧠 **正在分析搜索结果并处理HTML内容**...`,
               role: "assistant",
               createAt: Date.now(),
               updateAt: Date.now(),
             };
-            
-            // 替换之前的搜索中消息
-            deleteMessage(session.id, searchingMsg.id);
+            addMessage(session.id, analyzingMsg);
+            // 使用增强版的HTML解析和AI分析功能
+            const analyzedResults = await webService.analyzeHtmlContentWithAI(
+              searchResults,
+              userMessage.content,
+              webAiConfig
+            );
+            // 将分析后的搜索结果作为系统消息添加
+            messages.push({
+              role: "system",
+              content: analyzedResults
+            });
+            // 添加搜索完成提示消息，稍后会被实际回复替换
+            const completedMsg: Message = {
+              id: `search-completed-${Date.now()}`,
+              content: "✅ **搜索完成并深度解析网页内容**，正在生成回复...",
+              role: "assistant",
+              createAt: Date.now(),
+              updateAt: Date.now(),
+            };
+            // 替换之前的分析中消息
+            deleteMessage(session.id, analyzingMsg.id);
             addMessage(session.id, completedMsg);
           }
         } catch (error) {
+          // 检查是否是用户主动取消请求
+          if ((error as any)?.name === 'AbortError') {
+            console.log("搜索请求被用户取消");
+            return; // 直接返回，不继续处理
+          }
           console.error("执行网络搜索失败:", error);
           // 搜索失败继续对话，不中断流程
         }
@@ -862,6 +883,7 @@ const ChatPanel: React.FC = () => {
       const chatRequest: ChatRequest = {
         messages,
         signal: abortControllerRef.current.signal,
+        sessionId: session.id, // 添加会话ID
         onStream: (text) => {
           // 当收到第一个流式响应时，关闭加载中状态
           if (isLoading) {
@@ -881,7 +903,7 @@ const ChatPanel: React.FC = () => {
       };
 
       // 发送请求并获取回复
-      await aiService.chat(chatRequest);
+      await service.chat(chatRequest);
 
       // 流式回复结束，保存最终回复
       const msg: Message = {
@@ -1071,37 +1093,6 @@ const ChatPanel: React.FC = () => {
     );
   };
 
-  // 处理点击网络搜索图标
-  const handleWebSearchClick = () => {
-    // 直接切换联网搜索开关状态
-    const newConfig = {
-      ...webSearch,
-      enabled: !webSearch.enabled
-    };
-    
-    // 如果是开启状态，确保有默认搜索类型
-    if (newConfig.enabled && newConfig.type === 'none') {
-      newConfig.type = 'bing';
-    }
-    
-    // 更新设置
-    setWebSearch(newConfig);
-    
-    // 显示提示消息
-    if (newConfig.enabled) {
-      const searchTypeText = {
-        'bing': 'Bing搜索',
-        'google': 'Google搜索',
-        'baidu': '百度搜索',
-        'none': '无'
-      }[newConfig.type] || '未知搜索引擎';
-      
-      message.success(`已启用联网搜索: ${searchTypeText}`);
-    } else {
-      message.info('已关闭联网搜索');
-    }
-  };
-
   // 处理清空所有消息
   const handleClearAllMessages = () => {
     if (!session) return;
@@ -1151,31 +1142,21 @@ const ChatPanel: React.FC = () => {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: token.marginXS }}>
-          <Tooltip title="清空所有消息">
-            <Button
-              type="text"
-              size="small"
-              icon={<ClearOutlined />}
-              onClick={handleClearAllMessages}
-              disabled={!session || session.messages.length === 0 || isGenerating}
-            />
-          </Tooltip>
-          
-          <Select
-            value={currentConfig.model}
-            onChange={handleModelChange}
-            options={modelList.map(m => ({ label: m, value: m }))}
-            placeholder="选择模型"
-            size="small"
-            variant="filled"
-            loading={modelList.length === 0}
-            disabled={isGenerating}
-            showSearch
-            filterOption={(input, option) => 
-              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-            }
-            optionFilterProp="label"
-          />
+        <Select
+          value={currentConfig.model}
+          onChange={handleModelChange}
+          options={modelList.map(m => ({ label: m, value: m }))}
+          placeholder="选择模型"
+          size="small"
+          variant="filled"
+          loading={modelList.length === 0}
+          disabled={isGenerating}
+          showSearch
+          filterOption={(input, option) => 
+            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+          }
+          optionFilterProp="label"
+        />
         </div>
       </div>
       
@@ -1296,7 +1277,19 @@ const ChatPanel: React.FC = () => {
           gap: token.marginXS // 添加间距
         }}>
           {/* 全局提词开关按钮 */}
-          <Tooltip title={useGlobalPrompt ? "已启用全局提词" : "点击启用全局提词"}>
+          <Tooltip 
+            title={
+              useGlobalPrompt 
+                ? <div>
+                    <div>全局提词已启用：</div>
+                    <div style={{ maxWidth: '300px', whiteSpace: 'normal', wordBreak: 'break-all' }}>
+                      {globalPrompt || '未设置全局提词'}
+                    </div>
+                  </div> 
+                : "点击启用全局提词"
+            }
+            placement="top"
+          >
             <Tag
               icon={<BulbOutlined />}
               color={useGlobalPrompt ? "processing" : "default"}
@@ -1311,7 +1304,193 @@ const ChatPanel: React.FC = () => {
           </Tooltip>
           
           {/* 联网搜索按钮 */}
-          <Tooltip title={webSearch.enabled ? `已启用联网搜索: ${webSearch.type}` : "点击启用联网搜索"}>
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'none',
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px 4px' }}>
+                      <div style={{ marginRight: '12px', width: '20px', display: 'flex', justifyContent: 'center' }}>
+                        {(webSearch.enabled && webSearch.type === 'none') && <CheckOutlined style={{ color: token.colorPrimary }} />}
+                      </div>
+                      <span>不使用联网搜索</span>
+                    </div>
+                  ),
+                  onClick: () => {
+                    setWebSearch({ ...webSearch, enabled: false, type: 'none' });
+                    message.success('已禁用联网搜索');
+                  }
+                },
+                {
+                  type: 'divider' as const
+                },
+                {
+                  key: 'bing',
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px 4px' }}>
+                      <div style={{ marginRight: '12px', width: '20px', display: 'flex', justifyContent: 'center' }}>
+                        {(webSearch.enabled && webSearch.type === 'bing') && <CheckOutlined style={{ color: token.colorPrimary }} />}
+                      </div>
+                      <span>Bing搜索</span>
+                    </div>
+                  ),
+                  onClick: () => {
+                    setWebSearch({ 
+                      ...webSearch, 
+                      enabled: true, 
+                      type: 'bing'
+                    });
+                    message.success('已启用Bing搜索');
+                  }
+                },
+                {
+                  key: 'google',
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px 4px' }}>
+                      <div style={{ marginRight: '12px', width: '20px', display: 'flex', justifyContent: 'center' }}>
+                        {(webSearch.enabled && webSearch.type === 'google') && <CheckOutlined style={{ color: token.colorPrimary }} />}
+                      </div>
+                      <span>Google搜索</span>
+                    </div>
+                  ),
+                  onClick: () => {
+                    setWebSearch({ 
+                      ...webSearch, 
+                      enabled: true, 
+                      type: 'google'
+                    });
+                    message.success('已启用Google搜索');
+                  }
+                },
+                {
+                  key: 'baidu',
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px 4px' }}>
+                      <div style={{ marginRight: '12px', width: '20px', display: 'flex', justifyContent: 'center' }}>
+                        {(webSearch.enabled && webSearch.type === 'baidu') && <CheckOutlined style={{ color: token.colorPrimary }} />}
+                      </div>
+                      <span>百度搜索</span>
+                    </div>
+                  ),
+                  onClick: () => {
+                    setWebSearch({ 
+                      ...webSearch, 
+                      enabled: true, 
+                      type: 'baidu'
+                    });
+                    message.success('已启用百度搜索');
+                  }
+                },
+                {
+                  type: 'divider' as const
+                },
+                ...(webSearch.searchUrl && webSearch.searchUrl.trim() !== '' ? [
+                  {
+                    key: 'custom',
+                    label: (
+                      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 4px' }}>
+                        <div style={{ marginRight: '12px', width: '20px', display: 'flex', justifyContent: 'center' }}>
+                          {(webSearch.enabled && webSearch.type === 'custom') && <CheckOutlined style={{ color: token.colorPrimary }} />}
+                        </div>
+                        <div>
+                          <div>自定义搜索</div>
+                          <div style={{ fontSize: '12px', color: token.colorTextSecondary }}>
+                            参数: {webSearch.searchParam || 'q'}
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                    onClick: () => {
+                      setWebSearch({ 
+                        ...webSearch, 
+                        enabled: true, 
+                        type: 'custom',
+                        searchParam: webSearch.searchParam || 'q'
+                      });
+                      message.success('已启用自定义搜索');
+                    }
+                  }
+                ] : [
+                  {
+                    key: 'custom_disabled',
+                    label: (
+                      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 4px', opacity: 0.5 }}>
+                        <div style={{ marginRight: '12px', width: '20px', display: 'flex', justifyContent: 'center' }}>
+                          <SettingOutlined style={{ color: token.colorTextDisabled }} />
+                        </div>
+                        <span style={{ color: token.colorTextDisabled }}>未配置自定义搜索</span>
+                      </div>
+                    ),
+                    disabled: true
+                  },
+                  {
+                    key: 'go_config',
+                    label: (
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        padding: '8px 4px',
+                        color: token.colorPrimary,
+                        borderRadius: token.borderRadiusSM,
+                        transition: 'all 0.3s'
+                      }}>
+                        <div style={{ marginRight: '12px', width: '20px', display: 'flex', justifyContent: 'center' }}>
+                          <SettingOutlined style={{ color: token.colorPrimary }} />
+                        </div>
+                        <span>前往配置自定义搜索</span>
+                      </div>
+                    ),
+                    onClick: () => {
+                      navigate('/settings/web-search');
+                      message.info('请在设置页配置自定义搜索URL');
+                    }
+                  }
+                ])
+              ]
+            }}
+            trigger={['click']}
+            placement="topRight"
+            dropdownRender={(menu) => (
+              <div style={{ 
+                backgroundColor: token.colorBgElevated,
+                borderRadius: token.borderRadiusLG,
+                boxShadow: token.boxShadowSecondary,
+                padding: '8px 0'
+              }}>
+                <div style={{ 
+                  padding: '8px 12px', 
+                  color: token.colorTextSecondary,
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}>
+                  搜索引擎选择
+                </div>
+                {React.cloneElement(menu as React.ReactElement)}
+              </div>
+            )}
+          >
+            <Tooltip title={
+              webSearch.enabled 
+              ? (
+                <div>
+                  <div>当前联网搜索: {
+                    webSearch.type === 'custom' ? '自定义搜索' : 
+                    webSearch.type === 'bing' ? 'Bing搜索' :
+                    webSearch.type === 'google' ? 'Google搜索' :
+                    webSearch.type === 'baidu' ? '百度搜索' : 
+                    webSearch.type
+                  }</div>
+                  {webSearch.type === 'custom' && webSearch.searchUrl && (
+                    <div style={{ fontSize: '12px', maxWidth: '220px', wordBreak: 'break-all' }}>
+                      URL: {webSearch.searchUrl}<br />
+                      参数: {webSearch.searchParam || 'q'}
+                    </div>
+                  )}
+                </div>
+              ) 
+              : "点击启用联网搜索"
+            }>
             <Tag
               icon={<GlobalOutlined />}
               color={webSearch.enabled ? "success" : "default"}
@@ -1321,7 +1500,26 @@ const ChatPanel: React.FC = () => {
                 borderRadius: token.borderRadiusSM,
                 marginRight: 0
               }}
-              onClick={handleWebSearchClick}
+              />
+            </Tooltip>
+          </Dropdown>
+          
+          {/* 清空消息按钮 - 从顶部移动到这里 */}
+          <Tooltip title="清空所有消息">
+            <Tag
+              icon={<ClearOutlined />}
+              color="default"
+              style={{ 
+                cursor: (!session || session.messages.length === 0 || isGenerating) ? 'not-allowed' : 'pointer',
+                padding: '4px 8px',
+                borderRadius: token.borderRadiusSM,
+                marginRight: 0,
+                opacity: (!session || session.messages.length === 0 || isGenerating) ? 0.5 : 1
+              }}
+              onClick={() => {
+                if (!session || session.messages.length === 0 || isGenerating) return;
+                handleClearAllMessages();
+              }}
             />
           </Tooltip>
           

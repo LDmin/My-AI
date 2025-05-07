@@ -24,7 +24,16 @@ export class SiliconflowService extends AIService {
    * 发送聊天消息并获取流式响应
    */
   async chat(request: ChatRequest): Promise<string> {
-    const { messages, signal, onStream, onThinking } = request;
+    const { messages, signal, onStream, onThinking, sessionId } = request;
+    
+    // 创建请求的AbortController
+    const controller = signal ? undefined : new AbortController();
+    const requestSignal = signal || controller?.signal;
+    
+    // 如果提供了会话ID，则添加到活跃请求列表
+    if (sessionId && controller) {
+      this.addActiveRequest(sessionId, controller);
+    }
     
     // 构建请求URL
     const apiUrl = `${this.config.baseUrl}/v1/chat/completions`;
@@ -44,27 +53,27 @@ export class SiliconflowService extends AIService {
         temperature: 0.7,
         top_p: 0.7,
       }),
-      signal
+      signal: requestSignal
     };
 
     // 发送请求并处理响应
-    const response = await fetch(apiUrl, options);
-    
-    if (!response.ok) {
-      throw new Error(`硅基流动API请求失败: ${response.status} ${response.statusText}`);
-    }
-
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let fullText = '';
-    let thinkingContent = '';
-    
-    if (!reader) {
-      return fullText;
-    }
-
-    // 处理流式响应
     try {
+      const response = await fetch(apiUrl, options);
+      
+      if (!response.ok) {
+        throw new Error(`硅基流动API请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let fullText = '';
+      let thinkingContent = '';
+      
+      if (!reader) {
+        return fullText;
+      }
+
+      // 处理流式响应
       // 如果是流式响应
       if (options.body.includes('"stream":true')) {
         while (true) {
@@ -116,15 +125,22 @@ export class SiliconflowService extends AIService {
           console.error('解析非流式响应JSON时出错:', e);
         }
       }
+      
+      return fullText;
     } catch (error) {
+      // 检查是否是用户主动取消请求
       if (error instanceof DOMException && error.name === 'AbortError') {
-        throw error; // 重新抛出中止错误
+        console.log('[SiliconflowService] 请求被用户取消');
+      } else {
+        console.error('[SiliconflowService] 读取响应流时出错:', error);
       }
-      console.error('读取响应流时出错:', error);
       throw error;
+    } finally {
+      // 无论成功还是失败，都从活跃请求中移除
+      if (sessionId && controller) {
+        this.removeActiveRequest(sessionId, controller);
+      }
     }
-    
-    return fullText;
   }
 
   /**
