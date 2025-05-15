@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { Form, Select, Card, Divider, Typography, Space, theme } from 'antd'
-import OllamaConfig from '../OllamaConfig'
-import SiliconflowConfig from '../SiliconflowConfig'
+import OllamaConfig from '@/pages/ModelSettings/OllamaConfig'
+import SiliconflowConfig from '@/pages/ModelSettings/SiliconflowConfig'
+import OpenAIConfig from '@/pages/ModelSettings/OpenAIConfig'
+import BaiduConfig from '@/pages/ModelSettings/BaiduConfig'
+import AliConfig from '@/pages/ModelSettings/AliConfig'
+import ZhipuConfig from '@/pages/ModelSettings/ZhipuConfig'
+import MiniMaxConfig from '@/pages/ModelSettings/MiniMaxConfig'
+import XunfeiConfig from '@/pages/ModelSettings/XunfeiConfig'
 import { useSettingsStore, AIServiceType } from '../../store/settingsStore'
 
 const { Option } = Select
@@ -32,11 +38,17 @@ const ModelSettings: React.FC = () => {
       case 'siliconflow':
         return <SiliconflowConfig />
       case 'openai':
-        return <Card title="OpenAI API 配置">敬请期待</Card>
-      case 'api2d':
-        return <Card title="API2D 配置">敬请期待</Card>
-      case 'azure':
-        return <Card title="Azure OpenAI 配置">敬请期待</Card>
+        return <OpenAIConfig />
+      case 'baidu':
+        return <BaiduConfig />
+      case 'ali':
+        return <AliConfig />
+      case 'zhipu':
+        return <ZhipuConfig />
+      case 'minimax':
+        return <MiniMaxConfig />
+      case 'xunfei':
+        return <XunfeiConfig />
       default:
         return null
     }
@@ -61,9 +73,12 @@ const ModelSettings: React.FC = () => {
             >
               <Option value="ollama">Ollama (本地模型)</Option>
               <Option value="siliconflow">硅基流动 API</Option>
-              {/* <Option value="openai">OpenAI API</Option>
-              <Option value="api2d">API2D (OpenAI代理)</Option>
-              <Option value="azure">Azure OpenAI</Option> */}
+              <Option value="openai">OpenAI API</Option>
+              <Option value="baidu">百度文心一言</Option>
+              <Option value="ali">阿里通义千问</Option>
+              <Option value="zhipu">智谱AI</Option>
+              <Option value="minimax">MiniMax</Option>
+              <Option value="xunfei">讯飞星火</Option>
             </Select>
           </Form.Item>
         </Form>

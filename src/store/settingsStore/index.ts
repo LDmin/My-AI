@@ -12,6 +12,39 @@ interface SiliconflowConfig {
   token: string
 }
 
+interface OpenAIConfig {
+  apiKey: string;
+  model: string;
+}
+
+interface BaiduConfig {
+  apiKey: string;
+  secretKey: string;
+  model: string;
+}
+
+interface AliConfig {
+  apiKey: string;
+  model: string;
+}
+
+interface ZhipuConfig {
+  apiKey: string;
+  model: string;
+}
+
+interface MiniMaxConfig {
+  apiKey: string;
+  model: string;
+}
+
+interface XunfeiConfig {
+  appId: string;
+  apiSecret: string;
+  apiKey: string;
+  model: string;
+}
+
 // 网络搜索配置
 export type WebSearchType = 'none' | 'bing' | 'google' | 'baidu' | 'custom';
 
@@ -26,7 +59,15 @@ interface WebSearchConfig {
 }
 
 // 服务类型定义
-export type AIServiceType = 'ollama' | 'siliconflow' | 'openai' | 'api2d' | 'azure';
+export type AIServiceType =
+  | 'ollama'
+  | 'siliconflow'
+  | 'openai'
+  | 'baidu'
+  | 'ali'
+  | 'zhipu'
+  | 'minimax'
+  | 'xunfei';
 
 // 完整设置类型
 interface Settings {
@@ -43,11 +84,23 @@ interface Settings {
 interface SettingsState {
   ollama: OllamaConfig
   siliconflow: SiliconflowConfig
+  openai: OpenAIConfig
+  baidu: BaiduConfig
+  ali: AliConfig
+  zhipu: ZhipuConfig
+  minimax: MiniMaxConfig
+  xunfei: XunfeiConfig
   webSearch: WebSearchConfig
   settings: Settings
   serviceType: AIServiceType
   setOllama: (config: OllamaConfig) => void
   setSiliconflow: (config: SiliconflowConfig) => void
+  setOpenai: (config: OpenAIConfig) => void
+  setBaidu: (config: BaiduConfig) => void
+  setAli: (config: AliConfig) => void
+  setZhipu: (config: ZhipuConfig) => void
+  setMinimax: (config: MiniMaxConfig) => void
+  setXunfei: (config: XunfeiConfig) => void
   setWebSearch: (config: WebSearchConfig) => void
   setServiceType: (type: AIServiceType) => void
   setSettings: (settings: Settings) => void
@@ -78,6 +131,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     model: '',
     token: ''
   },
+  openai: { apiKey: '', model: '' },
+  baidu: { apiKey: '', secretKey: '', model: '' },
+  ali: { apiKey: '', model: '' },
+  zhipu: { apiKey: '', model: '' },
+  minimax: { apiKey: '', model: '' },
+  xunfei: { appId: '', apiSecret: '', apiKey: '', model: '' },
   webSearch: {
     enabled: false,
     type: 'bing'
@@ -123,6 +182,45 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         serviceType: 'siliconflow'
       })
     }
+  },
+  
+  setOpenai: (config) => {
+    set({ openai: config });
+    saveData('openai-apiKey', config.apiKey);
+    saveData('openai-model', config.model);
+  },
+  
+  setBaidu: (config) => {
+    set({ baidu: config });
+    saveData('baidu-apiKey', config.apiKey);
+    saveData('baidu-secretKey', config.secretKey);
+    saveData('baidu-model', config.model);
+  },
+  
+  setAli: (config) => {
+    set({ ali: config });
+    saveData('ali-apiKey', config.apiKey);
+    saveData('ali-model', config.model);
+  },
+  
+  setZhipu: (config) => {
+    set({ zhipu: config });
+    saveData('zhipu-apiKey', config.apiKey);
+    saveData('zhipu-model', config.model);
+  },
+  
+  setMinimax: (config) => {
+    set({ minimax: config });
+    saveData('minimax-apiKey', config.apiKey);
+    saveData('minimax-model', config.model);
+  },
+  
+  setXunfei: (config) => {
+    set({ xunfei: config });
+    saveData('xunfei-appId', config.appId);
+    saveData('xunfei-apiSecret', config.apiSecret);
+    saveData('xunfei-apiKey', config.apiKey);
+    saveData('xunfei-model', config.model);
   },
   
   setWebSearch: (config) => {

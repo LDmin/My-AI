@@ -6,7 +6,11 @@
     {
       "code": "myai",
       "explain": "本地大模型AI对话",
-      "cmds": ["myai", "我的AI", "AI对话"]
+      "cmds": ["myai", "我的AI", "AI对话"],
+      "args": {
+        "width": 1200,
+        "height": 700
+      }
     }
   ],
   "development": {

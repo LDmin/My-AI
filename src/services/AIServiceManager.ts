@@ -1,18 +1,35 @@
 import { AIService, AIServiceConfig, AIServiceFactory } from "./AIService";
 import { OllamaService } from "./OllamaService";
 import { SiliconflowService, SiliconflowServiceConfig } from "./SiliconflowService";
+import { OpenAIService, OpenAIServiceConfig } from "./ai/OpenAIService";
+import { BaiduService, BaiduServiceConfig } from "./ai/BaiduService";
+import { AliService, AliServiceConfig } from "./ai/AliService";
+import { ZhipuService, ZhipuServiceConfig } from "./ai/ZhipuService";
+import { MiniMaxService, MiniMaxServiceConfig } from "./ai/MiniMaxService";
+import { XunfeiService, XunfeiServiceConfig } from "./ai/XunfeiService";
 
 // 服务类型枚举
 export enum AIServiceType {
   OLLAMA = 'ollama',
   SILICONFLOW = 'siliconflow',
-  // 未来可以添加其他服务类型
+  OPENAI = 'openai',
+  BAIDU = 'baidu',
+  ALI = 'ali',
+  ZHIPU = 'zhipu',
+  MINIMAX = 'minimax',
+  XUNFEI = 'xunfei',
 }
 
 // 服务工厂映射
 const serviceFactories: Record<AIServiceType, AIServiceFactory> = {
   [AIServiceType.OLLAMA]: (config) => new OllamaService(config),
   [AIServiceType.SILICONFLOW]: (config) => new SiliconflowService(config as SiliconflowServiceConfig),
+  [AIServiceType.OPENAI]: (config) => new OpenAIService(config as OpenAIServiceConfig),
+  [AIServiceType.BAIDU]: (config) => new BaiduService(config as BaiduServiceConfig),
+  [AIServiceType.ALI]: (config) => new AliService(config as AliServiceConfig),
+  [AIServiceType.ZHIPU]: (config) => new ZhipuService(config as ZhipuServiceConfig),
+  [AIServiceType.MINIMAX]: (config) => new MiniMaxService(config as MiniMaxServiceConfig),
+  [AIServiceType.XUNFEI]: (config) => new XunfeiService(config as XunfeiServiceConfig),
 };
 
 /**

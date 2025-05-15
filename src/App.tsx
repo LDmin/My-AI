@@ -10,6 +10,7 @@ import { initApp, logEnvironmentInfo } from './utils/init'
 import { useSettingsStore } from './store/settingsStore'
 import { useChatStore } from './store/chatStore'
 import { usePromptStore } from './store/promptStore'
+import Settings from './pages/Settings'
 
 // 会话路由
 function ChatRoute() {
@@ -43,14 +44,7 @@ function ChatRoute() {
 
 // 设置路由
 function SettingsRoute() {
-  // 导入并使用Settings组件
-  const Settings = lazy(() => import('./pages/Settings'));
-  
-  return (
-    <React.Suspense fallback={<div style={{ padding: 32 }}>加载中...</div>}>
-      <Settings />
-    </React.Suspense>
-  );
+  return <Settings />;
 }
 
 // 声明全局方法

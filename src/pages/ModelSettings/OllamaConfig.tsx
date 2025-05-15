@@ -1,9 +1,9 @@
 // @ts-ignore
 import React, { useState, useEffect } from 'react';
-import { useSettingsStore } from '../store/settingsStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { Form, Input, Button, Select, Spin, Alert, message, Typography, Space, theme } from 'antd'
 import { useNavigate } from 'react-router-dom'
-import { AIServiceManager, AIServiceType } from '../services';
+import { AIServiceManager, AIServiceType } from '@/services';
 
 const { Title, Text, Paragraph } = Typography
 const { useToken } = theme
